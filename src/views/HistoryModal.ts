@@ -1,16 +1,15 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
-import type LMStudioCopilotPlugin from "../main";
-import { Conversation } from "../types";
+import { Conversation, ILMStudioPlugin } from "../types";
 
 export class ChatHistoryModal extends Modal {
-  plugin: LMStudioCopilotPlugin;
+  plugin: ILMStudioPlugin;
   onSelectChat: (chat: Conversation) => void;
   onNewChat: () => void;
   private searchQuery: string = "";
 
   constructor(
     app: App,
-    plugin: LMStudioCopilotPlugin,
+    plugin: ILMStudioPlugin,
     onSelectChat: (chat: Conversation) => void,
     onNewChat: () => void,
   ) {

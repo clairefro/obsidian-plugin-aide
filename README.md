@@ -1,8 +1,8 @@
-# LM Studio Copilot for Obsidian
+# LM Studio Personal for Obsidian
 
 A GitHub Copilot-like right sidebar AI assistant for Obsidian that connects seamlessly to your local **LM Studio** server.
 
-![LM Studio Copilot](https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/images/icon.png)
+![LM Studio Personal](https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/images/icon.png)
 
 ## ✨ Features
 
@@ -29,9 +29,9 @@ A GitHub Copilot-like right sidebar AI assistant for Obsidian that connects seam
 
 ### 2. Enable Plugin in Obsidian
 
-1. In Obsidian, go to **Settings** -> **Community plugins** -> Enable **LM Studio Copilot**.
-2. Click the robot icon in the left ribbon or run the command **"Open Copilot sidebar"** from the Command Palette (`Ctrl/Cmd + P`).
-3. The Copilot panel will open in the right sidebar.
+1. In Obsidian, go to **Settings** -> **Community plugins** -> Enable **LM Studio Personal**.
+2. Click the robot icon in the left ribbon or run the command **"Open sidebar"** from the Command Palette (`Ctrl/Cmd + P`).
+3. The panel will open in the right sidebar.
 
 ---
 

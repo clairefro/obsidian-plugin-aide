@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-lm-studio-copilot",
+  "name": "obsidian-plugin-lm-studio-personal",
   "version": "1.0.0",
-  "description": "GitHub Copilot-like right sidebar AI assistant powered by local LM Studio server",
+  "description": "LM Studio Personal - GitHub Copilot-like right sidebar AI assistant powered by local LM Studio server",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",

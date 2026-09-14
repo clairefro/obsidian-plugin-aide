@@ -15,7 +15,7 @@ interface PluginData {
   conversations: Conversation[];
 }
 
-export default class LMStudioCopilotPlugin extends Plugin {
+export default class LMStudioPersonalPlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
   conversations: Conversation[] = [];
   currentConversationId: string = "";
@@ -32,14 +32,14 @@ export default class LMStudioCopilotPlugin extends Plugin {
     );
 
     // Ribbon Icon to open sidebar
-    this.addRibbonIcon("bot", "Open LM Studio Copilot", () => {
+    this.addRibbonIcon("bot", "Open LM Studio Personal", () => {
       this.activateView();
     });
 
     // Commands
     this.addCommand({
-      id: "open-lm-studio-copilot-view",
-      name: "Open Copilot sidebar",
+      id: "open-lm-studio-personal-view",
+      name: "Open sidebar",
       callback: () => this.activateView(),
     });
 

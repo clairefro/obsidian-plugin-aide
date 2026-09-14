@@ -70,6 +70,18 @@ export interface LMStudioModel {
   owned_by?: string;
 }
 
+export interface ILMStudioPlugin {
+  settings: PluginSettings;
+  conversations: Conversation[];
+  currentConversationId: string;
+  cachedModels: LMStudioModel[];
+  saveSettings(): Promise<void>;
+  saveConversations(): Promise<void>;
+  getActiveChatView(): any;
+  updateContextInViews(): void;
+  updateModelInViews(modelId: string): void;
+}
+
 export interface StreamChatParams {
   baseUrl: string;
   model: string;

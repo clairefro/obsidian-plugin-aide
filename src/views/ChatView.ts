@@ -7,15 +7,19 @@ import {
   TFile,
   MarkdownView,
 } from "obsidian";
-import type LMStudioCopilotPlugin from "../main";
-import { ChatMessage, Conversation, ChatContextItem } from "../types";
+import {
+  ChatMessage,
+  Conversation,
+  ChatContextItem,
+  ILMStudioPlugin,
+} from "../types";
 import { LMStudioClient } from "../api/lmStudioClient";
 import { ChatHistoryModal } from "./HistoryModal";
 
 export const LM_STUDIO_VIEW_TYPE = "lm-studio-copilot-view";
 
 export class LMStudioChatView extends ItemView {
-  plugin: LMStudioCopilotPlugin;
+  plugin: ILMStudioPlugin;
 
   // UI Elements
   private headerEl!: HTMLElement;
@@ -35,7 +39,7 @@ export class LMStudioChatView extends ItemView {
   private activeContext: ChatContextItem | null = null;
   private isContextManuallyRemoved: boolean = false;
 
-  constructor(leaf: WorkspaceLeaf, plugin: LMStudioCopilotPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: ILMStudioPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.currentConversation = this.createNewConversation();
@@ -46,7 +50,7 @@ export class LMStudioChatView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "LM Studio Copilot";
+    return "LM Studio Personal";
   }
 
   getIcon(): string {
@@ -397,7 +401,7 @@ export class LMStudioChatView extends ItemView {
       });
       const iconEl = emptyStateEl.createDiv({ cls: "lm-copilot-empty-icon" });
       setIcon(iconEl, "sparkles");
-      emptyStateEl.createEl("h3", { text: "LM Studio Copilot" });
+      emptyStateEl.createEl("h3", { text: "LM Studio Personal" });
       emptyStateEl.createEl("p", {
         text: "Ask questions, brainstorm ideas, analyze notes, or write content with your local LLMs.",
       });

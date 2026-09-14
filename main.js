@@ -25,7 +25,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => LMStudioCopilotPlugin
+  default: () => LMStudioPersonalPlugin
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian4 = require("obsidian");
@@ -72,11 +72,13 @@ var LMStudioClient = class {
       const response = await fetch(endpoint, {
         method: "GET",
         headers: {
-          "Accept": "application/json"
+          Accept: "application/json"
         }
       });
       if (!response.ok) {
-        throw new Error(`Failed to fetch models: HTTP ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch models: HTTP ${response.status} ${response.statusText}`
+        );
       }
       const data = await response.json();
       if (data && Array.isArray(data.data)) {
@@ -125,7 +127,7 @@ var LMStudioClient = class {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Accept": "text/event-stream"
+        Accept: "text/event-stream"
       },
       body: JSON.stringify(bodyPayload),
       signal: params.signal
@@ -136,10 +138,14 @@ var LMStudioClient = class {
         errorText = await response.text();
       } catch (_) {
       }
-      throw new Error(`LM Studio API error (HTTP ${response.status}): ${errorText || response.statusText}`);
+      throw new Error(
+        `LM Studio API error (HTTP ${response.status}): ${errorText || response.statusText}`
+      );
     }
     if (!response.body) {
-      throw new Error("Response body is empty or readable stream is not supported.");
+      throw new Error(
+        "Response body is empty or readable stream is not supported."
+      );
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
@@ -267,8 +273,10 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "LM Studio Copilot Settings" });
-    new import_obsidian.Setting(containerEl).setName("LM Studio Base URL").setDesc("The base URL of your local LM Studio server (usually http://127.0.0.1:1234/v1).").addText(
+    containerEl.createEl("h2", { text: "LM Studio Personal Settings" });
+    new import_obsidian.Setting(containerEl).setName("LM Studio Base URL").setDesc(
+      "The base URL of your local LM Studio server (usually http://127.0.0.1:1234/v1)."
+    ).addText(
       (text) => text.setPlaceholder("http://127.0.0.1:1234/v1").setValue(this.plugin.settings.baseUrl).onChange(async (value) => {
         this.plugin.settings.baseUrl = value.trim() || DEFAULT_SETTINGS.baseUrl;
         await this.plugin.saveSettings();
@@ -282,7 +290,9 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
         btn.setButtonText("Test & Refresh Models");
       })
     );
-    this.connectionStatusEl = containerEl.createDiv({ cls: "lm-copilot-settings-status" });
+    this.connectionStatusEl = containerEl.createDiv({
+      cls: "lm-copilot-settings-status"
+    });
     const modelSetting = new import_obsidian.Setting(containerEl).setName("Default Model").setDesc("The active or loaded model to query in LM Studio.").addDropdown((dropdown) => {
       this.modelDropdown = dropdown;
       this.populateModelDropdown(dropdown);
@@ -292,7 +302,9 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.updateModelInViews(val);
       });
     });
-    new import_obsidian.Setting(containerEl).setName("System Prompt").setDesc("The initial system instructions given to the model for every conversation.").addTextArea((text) => {
+    new import_obsidian.Setting(containerEl).setName("System Prompt").setDesc(
+      "The initial system instructions given to the model for every conversation."
+    ).addTextArea((text) => {
       text.setPlaceholder("Enter system prompt...").setValue(this.plugin.settings.systemPrompt).onChange(async (val) => {
         this.plugin.settings.systemPrompt = val;
         await this.plugin.saveSettings();
@@ -300,19 +312,25 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
       text.inputEl.rows = 4;
       text.inputEl.cols = 40;
     });
-    new import_obsidian.Setting(containerEl).setName("Show Reasoning & Thinking").setDesc("Display reasoning thought chains in collapsible blocks for reasoning models (DeepSeek R1, GPT-OSS, QwQ, etc.).").addToggle(
+    new import_obsidian.Setting(containerEl).setName("Show Reasoning & Thinking").setDesc(
+      "Display reasoning thought chains in collapsible blocks for reasoning models (DeepSeek R1, GPT-OSS, QwQ, etc.)."
+    ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.showReasoning).onChange(async (val) => {
         this.plugin.settings.showReasoning = val;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Include Active Note by Default").setDesc("Automatically attach the current active note as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat.").addToggle(
+    new import_obsidian.Setting(containerEl).setName("Include Active Note by Default").setDesc(
+      "Automatically attach the current active note as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat."
+    ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.includeActiveNoteByDefault).onChange(async (val) => {
         this.plugin.settings.includeActiveNoteByDefault = val;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Max Context Characters").setDesc("Maximum characters of the active note to send to the model to avoid exceeding context window limits.").addText(
+    new import_obsidian.Setting(containerEl).setName("Max Context Characters").setDesc(
+      "Maximum characters of the active note to send to the model to avoid exceeding context window limits."
+    ).addText(
       (text) => text.setPlaceholder("24000").setValue(String(this.plugin.settings.maxContextChars)).onChange(async (val) => {
         const num = parseInt(val, 10);
         if (!isNaN(num) && num > 0) {
@@ -322,13 +340,17 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     containerEl.createEl("h3", { text: "Model Parameters" });
-    new import_obsidian.Setting(containerEl).setName("Temperature").setDesc("Sampling temperature (0.0 = deterministic and focused, 1.0 = creative).").addSlider(
+    new import_obsidian.Setting(containerEl).setName("Temperature").setDesc(
+      "Sampling temperature (0.0 = deterministic and focused, 1.0 = creative)."
+    ).addSlider(
       (slider) => slider.setLimits(0, 1.5, 0.05).setValue(this.plugin.settings.temperature).setDynamicTooltip().onChange(async (val) => {
         this.plugin.settings.temperature = val;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Max Output Tokens").setDesc("Maximum tokens to generate per response (-1 or 0 for unlimited / model default).").addText(
+    new import_obsidian.Setting(containerEl).setName("Max Output Tokens").setDesc(
+      "Maximum tokens to generate per response (-1 or 0 for unlimited / model default)."
+    ).addText(
       (text) => text.setPlaceholder("4096").setValue(String(this.plugin.settings.maxTokens)).onChange(async (val) => {
         const num = parseInt(val, 10);
         if (!isNaN(num)) {
@@ -338,15 +360,21 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     containerEl.createEl("h3", { text: "Chat History" });
-    new import_obsidian.Setting(containerEl).setName("Save Chat History").setDesc("Automatically persist conversation history across sessions. When disabled, chats exist only in memory during the session.").addToggle(
+    new import_obsidian.Setting(containerEl).setName("Save Chat History").setDesc(
+      "Automatically persist conversation history across sessions. When disabled, chats exist only in memory during the session."
+    ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.saveChatHistory).onChange(async (val) => {
         this.plugin.settings.saveChatHistory = val;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Clear All Chat History").setDesc(`Permanently delete all saved chat sessions (${this.plugin.conversations.length} currently saved).`).addButton(
+    new import_obsidian.Setting(containerEl).setName("Clear All Chat History").setDesc(
+      `Permanently delete all saved chat sessions (${this.plugin.conversations.length} currently saved).`
+    ).addButton(
       (btn) => btn.setButtonText("Clear History").setWarning().onClick(async () => {
-        if (confirm("Are you sure you want to delete all chat history? This cannot be undone.")) {
+        if (confirm(
+          "Are you sure you want to delete all chat history? This cannot be undone."
+        )) {
           this.plugin.conversations = [];
           await this.plugin.saveConversations();
           const view = this.plugin.getActiveChatView();
@@ -383,7 +411,9 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
     if (!this.connectionStatusEl) return;
     this.connectionStatusEl.empty();
     try {
-      const models = await LMStudioClient.fetchModels(this.plugin.settings.baseUrl);
+      const models = await LMStudioClient.fetchModels(
+        this.plugin.settings.baseUrl
+      );
       this.plugin.cachedModels = models;
       if (models.length === 0) {
         this.connectionStatusEl.createSpan({
@@ -411,7 +441,9 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
         text: `\u274C Connection failed: ${err.message || "Make sure LM Studio local server is running."}`,
         cls: "lm-copilot-status-error"
       });
-      new import_obsidian.Notice(`Failed to connect to LM Studio at ${this.plugin.settings.baseUrl}`);
+      new import_obsidian.Notice(
+        `Failed to connect to LM Studio at ${this.plugin.settings.baseUrl}`
+      );
     }
   }
 };
@@ -446,7 +478,9 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
       this.close();
       this.onNewChat();
     };
-    const searchContainer = contentEl.createDiv({ cls: "lm-copilot-history-search" });
+    const searchContainer = contentEl.createDiv({
+      cls: "lm-copilot-history-search"
+    });
     const searchInput = searchContainer.createEl("input", {
       type: "text",
       placeholder: "Search chats...",
@@ -456,10 +490,14 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
       this.searchQuery = e.target.value.toLowerCase();
       this.renderHistoryList(listContainer);
     };
-    const listContainer = contentEl.createDiv({ cls: "lm-copilot-history-list" });
+    const listContainer = contentEl.createDiv({
+      cls: "lm-copilot-history-list"
+    });
     this.renderHistoryList(listContainer);
     if (this.plugin.conversations.length > 0) {
-      const footerEl = contentEl.createDiv({ cls: "lm-copilot-history-footer" });
+      const footerEl = contentEl.createDiv({
+        cls: "lm-copilot-history-footer"
+      });
       const clearBtn = footerEl.createEl("button", {
         cls: "mod-warning lm-copilot-clear-all-btn",
         text: "Clear All History"
@@ -480,8 +518,12 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
       (c) => (c.title || "Untitled Chat").toLowerCase().includes(this.searchQuery)
     );
     if (filtered.length === 0) {
-      const emptyEl = containerEl.createDiv({ cls: "lm-copilot-history-empty" });
-      emptyEl.setText(this.searchQuery ? "No matching chats found." : "No saved chats yet.");
+      const emptyEl = containerEl.createDiv({
+        cls: "lm-copilot-history-empty"
+      });
+      emptyEl.setText(
+        this.searchQuery ? "No matching chats found." : "No saved chats yet."
+      );
       return;
     }
     filtered.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -504,9 +546,14 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
         minute: "2-digit"
       });
       const msgCount = chat.messages ? chat.messages.length : 0;
-      metaEl.createSpan({ text: `${dateStr} \xB7 ${msgCount} message${msgCount === 1 ? "" : "s"}` });
+      metaEl.createSpan({
+        text: `${dateStr} \xB7 ${msgCount} message${msgCount === 1 ? "" : "s"}`
+      });
       if (chat.model) {
-        metaEl.createSpan({ cls: "lm-copilot-history-model-tag", text: chat.model });
+        metaEl.createSpan({
+          cls: "lm-copilot-history-model-tag",
+          text: chat.model
+        });
       }
       const actionsEl = itemEl.createDiv({ cls: "lm-copilot-history-actions" });
       const editBtn = actionsEl.createEl("button", {
@@ -531,7 +578,9 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
       (0, import_obsidian2.setIcon)(deleteBtn, "trash-2");
       deleteBtn.onclick = async (e) => {
         e.stopPropagation();
-        this.plugin.conversations = this.plugin.conversations.filter((c) => c.id !== chat.id);
+        this.plugin.conversations = this.plugin.conversations.filter(
+          (c) => c.id !== chat.id
+        );
         await this.plugin.saveConversations();
         this.renderHistoryList(containerEl);
         if (this.plugin.currentConversationId === chat.id) {
@@ -575,7 +624,7 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     return LM_STUDIO_VIEW_TYPE;
   }
   getDisplayText() {
-    return "LM Studio Copilot";
+    return "LM Studio Personal";
   }
   getIcon() {
     return "bot";
@@ -600,8 +649,12 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
   // -------------------------------------------------------------
   buildHeader(parent) {
     this.headerEl = parent.createDiv({ cls: "lm-copilot-header" });
-    const modelGroup = this.headerEl.createDiv({ cls: "lm-copilot-model-group" });
-    this.modelSelectEl = modelGroup.createEl("select", { cls: "lm-copilot-model-select" });
+    const modelGroup = this.headerEl.createDiv({
+      cls: "lm-copilot-model-group"
+    });
+    this.modelSelectEl = modelGroup.createEl("select", {
+      cls: "lm-copilot-model-select"
+    });
     this.modelSelectEl.onchange = async () => {
       this.plugin.settings.selectedModel = this.modelSelectEl.value;
       this.currentConversation.model = this.modelSelectEl.value;
@@ -617,7 +670,9 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
       await this.refreshModelsDropdown();
       refreshBtn.removeClass("lm-spinning");
     };
-    const headerActions = this.headerEl.createDiv({ cls: "lm-copilot-header-actions" });
+    const headerActions = this.headerEl.createDiv({
+      cls: "lm-copilot-header-actions"
+    });
     const newChatBtn = headerActions.createEl("button", {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "New Chat" }
@@ -643,12 +698,20 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     this.renderContextPill();
   }
   buildMessagesArea(parent) {
-    this.messagesContainerEl = parent.createDiv({ cls: "lm-copilot-messages-container" });
+    this.messagesContainerEl = parent.createDiv({
+      cls: "lm-copilot-messages-container"
+    });
   }
   buildInputArea(parent) {
-    this.inputContainerEl = parent.createDiv({ cls: "lm-copilot-input-container" });
-    this.statusEl = this.inputContainerEl.createDiv({ cls: "lm-copilot-status-bar" });
-    const inputWrapper = this.inputContainerEl.createDiv({ cls: "lm-copilot-input-wrapper" });
+    this.inputContainerEl = parent.createDiv({
+      cls: "lm-copilot-input-container"
+    });
+    this.statusEl = this.inputContainerEl.createDiv({
+      cls: "lm-copilot-status-bar"
+    });
+    const inputWrapper = this.inputContainerEl.createDiv({
+      cls: "lm-copilot-input-wrapper"
+    });
     this.inputEl = inputWrapper.createEl("textarea", {
       cls: "lm-copilot-textarea",
       attr: {
@@ -666,7 +729,9 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
         this.handleSendMessage();
       }
     };
-    const buttonsWrapper = inputWrapper.createDiv({ cls: "lm-copilot-buttons-wrapper" });
+    const buttonsWrapper = inputWrapper.createDiv({
+      cls: "lm-copilot-buttons-wrapper"
+    });
     this.sendBtnEl = buttonsWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-send-btn",
       attr: { "aria-label": "Send Message" }
@@ -718,7 +783,9 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
   renderContextPill() {
     this.contextBarEl.empty();
     if (this.activeContext) {
-      const pill = this.contextBarEl.createDiv({ cls: "lm-copilot-context-pill" });
+      const pill = this.contextBarEl.createDiv({
+        cls: "lm-copilot-context-pill"
+      });
       const iconSpan = pill.createSpan({ cls: "lm-copilot-context-icon" });
       (0, import_obsidian3.setIcon)(iconSpan, "file-text");
       const titleSpan = pill.createSpan({
@@ -743,7 +810,9 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
         const attachBtn = this.contextBarEl.createDiv({
           cls: "lm-copilot-context-attach-btn"
         });
-        const iconSpan = attachBtn.createSpan({ cls: "lm-copilot-context-icon" });
+        const iconSpan = attachBtn.createSpan({
+          cls: "lm-copilot-context-icon"
+        });
         (0, import_obsidian3.setIcon)(iconSpan, "paperclip");
         attachBtn.createSpan({ text: `Attach ${activeFile.basename}.md` });
         attachBtn.onclick = () => {
@@ -758,7 +827,9 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
   // -------------------------------------------------------------
   async refreshModelsDropdown() {
     try {
-      const models = await LMStudioClient.fetchModels(this.plugin.settings.baseUrl);
+      const models = await LMStudioClient.fetchModels(
+        this.plugin.settings.baseUrl
+      );
       this.plugin.cachedModels = models;
       this.updateModelDropdown(this.plugin.settings.selectedModel);
     } catch (err) {
@@ -836,10 +907,12 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
   renderConversation() {
     this.messagesContainerEl.empty();
     if (this.currentConversation.messages.length === 0) {
-      const emptyStateEl = this.messagesContainerEl.createDiv({ cls: "lm-copilot-empty-state" });
+      const emptyStateEl = this.messagesContainerEl.createDiv({
+        cls: "lm-copilot-empty-state"
+      });
       const iconEl = emptyStateEl.createDiv({ cls: "lm-copilot-empty-icon" });
       (0, import_obsidian3.setIcon)(iconEl, "sparkles");
-      emptyStateEl.createEl("h3", { text: "LM Studio Copilot" });
+      emptyStateEl.createEl("h3", { text: "LM Studio Personal" });
       emptyStateEl.createEl("p", {
         text: "Ask questions, brainstorm ideas, analyze notes, or write content with your local LLMs."
       });
@@ -859,13 +932,17 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     const roleName = msg.role === "user" ? "You" : "Copilot";
     headerEl.createSpan({ cls: "lm-copilot-message-author", text: roleName });
     if (msg.role === "user" && msg.contextIncluded) {
-      const contextBadge = headerEl.createSpan({ cls: "lm-copilot-message-context-badge" });
+      const contextBadge = headerEl.createSpan({
+        cls: "lm-copilot-message-context-badge"
+      });
       (0, import_obsidian3.setIcon)(contextBadge, "file-text");
       contextBadge.createSpan({ text: msg.contextIncluded.title });
       contextBadge.title = `Attached note: ${msg.contextIncluded.path}`;
     }
     if (msg.role === "assistant" && (msg.reasoningContent || this.isGenerating)) {
-      const reasoningContainer = msgEl.createDiv({ cls: "lm-copilot-reasoning-container" });
+      const reasoningContainer = msgEl.createDiv({
+        cls: "lm-copilot-reasoning-container"
+      });
       if (!this.plugin.settings.showReasoning && !this.isGenerating) {
         reasoningContainer.addClass("is-hidden");
       }
@@ -875,16 +952,25 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
       if (this.isGenerating && !msg.content) {
         detailsEl.open = true;
       }
-      const summaryEl = detailsEl.createEl("summary", { cls: "lm-copilot-reasoning-summary" });
-      const brainIcon = summaryEl.createSpan({ cls: "lm-copilot-reasoning-icon" });
+      const summaryEl = detailsEl.createEl("summary", {
+        cls: "lm-copilot-reasoning-summary"
+      });
+      const brainIcon = summaryEl.createSpan({
+        cls: "lm-copilot-reasoning-icon"
+      });
       (0, import_obsidian3.setIcon)(brainIcon, "cpu");
-      summaryEl.createSpan({ cls: "lm-copilot-reasoning-title", text: "Thinking Process" });
+      summaryEl.createSpan({
+        cls: "lm-copilot-reasoning-title",
+        text: "Thinking Process"
+      });
       const reasoningBodyEl = detailsEl.createDiv({
         cls: "lm-copilot-reasoning-body",
         text: msg.reasoningContent || ""
       });
     }
-    const bodyEl = msgEl.createDiv({ cls: "lm-copilot-message-body markdown-rendered" });
+    const bodyEl = msgEl.createDiv({
+      cls: "lm-copilot-message-body markdown-rendered"
+    });
     if (msg.content) {
       import_obsidian3.MarkdownRenderer.render(
         this.app,
@@ -985,10 +1071,18 @@ ${m.content}`;
     };
     this.currentConversation.messages.push(assistantMsg);
     const assistantMsgEl = this.renderMessageElement(assistantMsg);
-    const reasoningContainer = assistantMsgEl.querySelector(".lm-copilot-reasoning-container");
-    const reasoningDetails = assistantMsgEl.querySelector(".lm-copilot-reasoning-details");
-    const reasoningBody = assistantMsgEl.querySelector(".lm-copilot-reasoning-body");
-    const bodyEl = assistantMsgEl.querySelector(".lm-copilot-message-body");
+    const reasoningContainer = assistantMsgEl.querySelector(
+      ".lm-copilot-reasoning-container"
+    );
+    const reasoningDetails = assistantMsgEl.querySelector(
+      ".lm-copilot-reasoning-details"
+    );
+    const reasoningBody = assistantMsgEl.querySelector(
+      ".lm-copilot-reasoning-body"
+    );
+    const bodyEl = assistantMsgEl.querySelector(
+      ".lm-copilot-message-body"
+    );
     this.scrollToBottom();
     this.isGenerating = true;
     this.setGeneratingUI(true);
@@ -1094,7 +1188,9 @@ ${m.content}`;
     if (!this.plugin.settings.saveChatHistory) {
       return;
     }
-    const idx = this.plugin.conversations.findIndex((c) => c.id === this.currentConversation.id);
+    const idx = this.plugin.conversations.findIndex(
+      (c) => c.id === this.currentConversation.id
+    );
     if (idx >= 0) {
       this.plugin.conversations[idx] = this.currentConversation;
     } else {
@@ -1105,23 +1201,24 @@ ${m.content}`;
 };
 
 // src/main.ts
-var LMStudioCopilotPlugin = class extends import_obsidian4.Plugin {
+var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
   settings = DEFAULT_SETTINGS;
   conversations = [];
   currentConversationId = "";
   cachedModels = [];
   async onload() {
+    console.log("[LM Studio Personal] Loading plugin");
     await this.loadPluginData();
     this.registerView(
       LM_STUDIO_VIEW_TYPE,
       (leaf) => new LMStudioChatView(leaf, this)
     );
-    this.addRibbonIcon("bot", "Open LM Studio Copilot", () => {
+    this.addRibbonIcon("bot", "Open LM Studio Personal", () => {
       this.activateView();
     });
     this.addCommand({
-      id: "open-lm-studio-copilot-view",
-      name: "Open Copilot sidebar",
+      id: "open-lm-studio-personal-view",
+      name: "Open sidebar",
       callback: () => this.activateView()
     });
     this.addCommand({
@@ -1162,7 +1259,9 @@ var LMStudioCopilotPlugin = class extends import_obsidian4.Plugin {
       name: "Refresh available models from LM Studio",
       callback: async () => {
         try {
-          const models = await LMStudioClient.fetchModels(this.settings.baseUrl);
+          const models = await LMStudioClient.fetchModels(
+            this.settings.baseUrl
+          );
           this.cachedModels = models;
           new import_obsidian4.Notice(`Found ${models.length} model(s) from LM Studio`);
           this.updateModelInViews(this.settings.selectedModel);

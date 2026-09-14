@@ -4,18 +4,18 @@ import {
   Setting,
   Notice,
   DropdownComponent,
+  Plugin,
 } from "obsidian";
-import type LMStudioCopilotPlugin from "./main";
-import { DEFAULT_SETTINGS } from "./types";
+import { DEFAULT_SETTINGS, ILMStudioPlugin } from "./types";
 import { LMStudioClient } from "./api/lmStudioClient";
 
 export class LMStudioSettingTab extends PluginSettingTab {
-  plugin: LMStudioCopilotPlugin;
+  plugin: ILMStudioPlugin;
   private modelDropdown: DropdownComponent | null = null;
   private connectionStatusEl: HTMLElement | null = null;
 
-  constructor(app: App, plugin: LMStudioCopilotPlugin) {
-    super(app, plugin);
+  constructor(app: App, plugin: ILMStudioPlugin) {
+    super(app, plugin as unknown as Plugin);
     this.plugin = plugin;
   }
 
@@ -23,7 +23,7 @@ export class LMStudioSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "LM Studio Copilot Settings" });
+    containerEl.createEl("h2", { text: "LM Studio Personal Settings" });
 
     // Server Configuration
     new Setting(containerEl)
