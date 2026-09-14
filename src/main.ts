@@ -11,8 +11,8 @@ import { LMStudioClient } from "./api/lmStudioClient";
 import { ChatHistoryModal } from "./views/HistoryModal";
 
 interface PluginData {
-  settings: PluginSettings;
-  conversations: Conversation[];
+  settings?: PluginSettings;
+  conversations?: Conversation[]; // Legacy field in data.json for migration
 }
 
 export default class AidePlugin extends Plugin {
@@ -21,15 +21,16 @@ export default class AidePlugin extends Plugin {
   currentConversationId: string = "";
   cachedModels: LMStudioModel[] = [];
 
+  private get historyFilePath(): string {
+    return `${this.manifest.dir}/history.json`;
+  }
+
   async onload(): Promise<void> {
     console.log("[Aide] Loading plugin");
     await this.loadPluginData();
 
     // Register Sidebar View
-    this.registerView(
-      AIDE_VIEW_TYPE,
-      (leaf) => new AideChatView(leaf, this),
-    );
+    this.registerView(AIDE_VIEW_TYPE, (leaf) => new AideChatView(leaf, this));
 
     // Ribbon Icon to open sidebar
     this.addRibbonIcon("bot", "Open Aide", () => {
@@ -38,8 +39,8 @@ export default class AidePlugin extends Plugin {
 
     // Commands
     this.addCommand({
-      id: "open-aide-view",
-      name: "Open sidebar",
+      id: "open",
+      name: "Open",
       callback: () => this.activateView(),
     });
 
@@ -185,31 +186,80 @@ export default class AidePlugin extends Plugin {
   // -------------------------------------------------------------
 
   async loadPluginData(): Promise<void> {
-    const data: PluginData = await this.loadData();
-    if (data) {
-      this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
-      this.conversations = Array.isArray(data.conversations)
-        ? data.conversations
-        : [];
+    const data: PluginData | null = await this.loadData();
+    if (data && data.settings) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings);
+    } else if (
+      data &&
+      !data.settings &&
+      typeof (data as any).baseUrl === "string"
+    ) {
+      // Legacy flat settings object in data.json
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, data as any);
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    }
+
+    // Load conversations from dedicated history.json file
+    await this.loadConversations(data);
+  }
+
+  private async loadConversations(
+    legacyData: PluginData | null,
+  ): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    const historyPath = this.historyFilePath;
+
+    try {
+      if (await adapter.exists(historyPath)) {
+        const raw = await adapter.read(historyPath);
+        const parsed = JSON.parse(raw);
+        this.conversations = Array.isArray(parsed) ? parsed : [];
+        return;
+      }
+    } catch (err) {
+      console.error("[Aide] Error reading history.json:", err);
+    }
+
+    // Migration: If history.json does not exist yet, check legacy data.json
+    if (
+      legacyData &&
+      Array.isArray(legacyData.conversations) &&
+      legacyData.conversations.length > 0
+    ) {
+      console.log(
+        `[Aide] Migrating ${legacyData.conversations.length} conversation(s) from data.json to history.json`,
+      );
+      this.conversations = legacyData.conversations;
+      await this.saveConversations();
+      // Clean up data.json so conversations aren't duplicated in data.json
+      await this.saveSettings();
+    } else {
       this.conversations = [];
     }
   }
 
   async saveSettings(): Promise<void> {
-    const data: PluginData = {
+    // Only persist settings in data.json
+    const data = {
       settings: this.settings,
-      conversations: this.conversations,
     };
     await this.saveData(data);
   }
 
   async saveConversations(): Promise<void> {
-    const data: PluginData = {
-      settings: this.settings,
-      conversations: this.conversations,
-    };
-    await this.saveData(data);
+    if (!this.settings.saveChatHistory) {
+      return;
+    }
+    const adapter = this.app.vault.adapter;
+    const historyPath = this.historyFilePath;
+    try {
+      await adapter.write(
+        historyPath,
+        JSON.stringify(this.conversations, null, 2),
+      );
+    } catch (err) {
+      console.error("[Aide] Error writing history.json:", err);
+    }
   }
 }

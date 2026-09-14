@@ -1,0 +1,10 @@
+# Node dependencies and build output
+node_modules/
+main.js
+
+# Local chat history (private conversation logs)
+history.json
+
+# Operating system files
+.DS_Store
+Thumbs.db

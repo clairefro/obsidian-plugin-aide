@@ -1486,6 +1486,9 @@ var AidePlugin = class extends import_obsidian4.Plugin {
   conversations = [];
   currentConversationId = "";
   cachedModels = [];
+  get historyFilePath() {
+    return `${this.manifest.dir}/history.json`;
+  }
   async onload() {
     console.log("[Aide] Loading plugin");
     await this.loadPluginData();
@@ -1497,8 +1500,8 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       this.activateView();
     });
     this.addCommand({
-      id: "open-aide-view",
-      name: "Open sidebar",
+      id: "open-aide-sidebar",
+      name: "Open Aide in side panel",
       callback: () => this.activateView()
     });
     this.addCommand({
@@ -1623,26 +1626,53 @@ var AidePlugin = class extends import_obsidian4.Plugin {
   // -------------------------------------------------------------
   async loadPluginData() {
     const data = await this.loadData();
-    if (data) {
-      this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
-      this.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+    if (data && data.settings) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings);
+    } else if (data && !data.settings && typeof data.baseUrl === "string") {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    }
+    await this.loadConversations(data);
+  }
+  async loadConversations(legacyData) {
+    const adapter = this.app.vault.adapter;
+    const historyPath = this.historyFilePath;
+    try {
+      if (await adapter.exists(historyPath)) {
+        const raw = await adapter.read(historyPath);
+        const parsed = JSON.parse(raw);
+        this.conversations = Array.isArray(parsed) ? parsed : [];
+        return;
+      }
+    } catch (err) {
+      console.error("[Aide] Error reading history.json:", err);
+    }
+    if (legacyData && Array.isArray(legacyData.conversations) && legacyData.conversations.length > 0) {
+      console.log(`[Aide] Migrating ${legacyData.conversations.length} conversation(s) from data.json to history.json`);
+      this.conversations = legacyData.conversations;
+      await this.saveConversations();
+      await this.saveSettings();
+    } else {
       this.conversations = [];
     }
   }
   async saveSettings() {
     const data = {
-      settings: this.settings,
-      conversations: this.conversations
+      settings: this.settings
     };
     await this.saveData(data);
   }
   async saveConversations() {
-    const data = {
-      settings: this.settings,
-      conversations: this.conversations
-    };
-    await this.saveData(data);
+    if (!this.settings.saveChatHistory) {
+      return;
+    }
+    const adapter = this.app.vault.adapter;
+    const historyPath = this.historyFilePath;
+    try {
+      await adapter.write(historyPath, JSON.stringify(this.conversations, null, 2));
+    } catch (err) {
+      console.error("[Aide] Error writing history.json:", err);
+    }
   }
 };

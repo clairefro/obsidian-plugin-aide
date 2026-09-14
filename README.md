@@ -2,20 +2,20 @@
 
 An AI assistant right-sidebar experience for Obsidian that connects seamlessly to your local **LM Studio** server.
 
-## ✨ Features
+## Features
 
-- 🤖 **Aide Right-Sidebar Experience**: A native Obsidian right-sidebar view for chatting with your local LLMs while browsing and writing notes.
-- 🔗 **Local LM Studio Integration**: Connects directly to LM Studio's OpenAI-compatible server (defaults to `http://127.0.0.1:1234/v1`).
-- 🧠 **Reasoning Models & Thinking Block**: Native support for reasoning models (e.g., DeepSeek R1, GPT-OSS, QwQ) with collapsible **Thinking Process** accordions that capture `<think>` tags and streaming `reasoning_content` deltas.
-- 📋 **Active Note Context**: Automatically attaches your current active note as context for the query. Features a context pill with an `[×]` button to dismiss context at any time, and an attach button to re-attach whenever desired.
-- 🗂️ **Dynamic Model Switching**: Pulls all available/loaded models directly from your local LM Studio instance into a dropdown with one-click refresh.
-- 💬 **Conversation History & Management**: Start new chats, search past conversations, rename, and delete chat history saved locally in your Obsidian vault.
-- ⚡ **Fast Streaming Markdown**: Real-time token streaming with live Markdown rendering using Obsidian's native renderer and quick copy-to-clipboard actions.
-- 🛠️ **Future-Ready Architecture**: Built-in structured parameters for tool calling (e.g., web search, vault query) for future expansion.
+- **Aide Right-Sidebar Experience**: A native Obsidian right-sidebar view for chatting with your local LLMs while browsing and writing notes.
+- **Local LM Studio Integration**: Connects directly to LM Studio's OpenAI-compatible server (defaults to `http://127.0.0.1:1234/v1`).
+- **Reasoning Models & Thinking Block**: Native support for reasoning models (e.g., DeepSeek R1, GPT-OSS, QwQ) with collapsible **Thinking Process** accordions that capture `<think>` tags and streaming `reasoning_content` deltas.
+- **Active Note Context**: Automatically attaches your current active note as context for the query. Features a context pill with an `[x]` button to dismiss context at any time, and an attach button to re-attach whenever desired.
+- **Dynamic Model Switching**: Pulls all available/loaded models directly from your local LM Studio instance into a dropdown with one-click refresh.
+- **Conversation History & Management**: Start new chats, search past conversations, rename, and delete chat history saved locally in your Obsidian vault.
+- **Fast Streaming Markdown**: Real-time token streaming with live Markdown rendering using Obsidian's native renderer and quick copy-to-clipboard actions.
+- **Future-Ready Architecture**: Built-in structured parameters for tool calling (e.g., web search, vault query) for future expansion.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Start LM Studio Server
 
@@ -33,7 +33,7 @@ An AI assistant right-sidebar experience for Obsidian that connects seamlessly t
 
 ---
 
-## ⚙️ Settings
+## Settings
 
 - **Base URL**: Set your LM Studio API endpoint (default: `http://127.0.0.1:1234/v1`). Includes a **"Test & Refresh Models"** button.
 - **Default Model**: Select which model to use by default.
@@ -47,12 +47,12 @@ An AI assistant right-sidebar experience for Obsidian that connects seamlessly t
 
 ---
 
-## ⌨️ Shortcuts & Commands
+## Shortcuts & Commands
 
 - `Enter`: Send message
 - `Shift + Enter`: Insert new line
 - `Command Palette`:
-  - `Open Copilot sidebar`
-  - `New chat session`
-  - `View chat history`
-  - `Refresh available models from LM Studio`
+  - `Aide: Open in side panel`
+  - `Aide: New chat session`
+  - `Aide: View chat history`
+  - `Aide: Refresh available models from LM Studio`
