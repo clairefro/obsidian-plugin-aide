@@ -15,9 +15,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   baseUrl: "http://127.0.0.1:1234/v1",
   selectedModel: "",
   systemPrompt:
-    "You are an expert AI assistant integrated into Obsidian as a Copilot. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
+    "You are an expert AI assistant integrated into Obsidian as Aide. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
   temperature: 0.7,
-  maxTokens: 4096,
+  maxTokens: 8192,
   includeActiveNoteByDefault: true,
   maxContextChars: 24000,
   autoTitleChat: true,
@@ -70,7 +70,7 @@ export interface LMStudioModel {
   owned_by?: string;
 }
 
-export interface ILMStudioPlugin {
+export interface IAidePlugin {
   settings: PluginSettings;
   conversations: Conversation[];
   currentConversationId: string;

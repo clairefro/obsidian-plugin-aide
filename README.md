@@ -1,12 +1,10 @@
-# LM Studio Personal for Obsidian
+# Aide for Obsidian
 
-A GitHub Copilot-like right sidebar AI assistant for Obsidian that connects seamlessly to your local **LM Studio** server.
-
-![LM Studio Personal](https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/images/icon.png)
+An AI assistant right-sidebar experience for Obsidian that connects seamlessly to your local **LM Studio** server.
 
 ## ✨ Features
 
-- 🤖 **Copilot Right-Sidebar Experience**: A native Obsidian right-sidebar view for chatting with your local LLMs while browsing and writing notes.
+- 🤖 **Aide Right-Sidebar Experience**: A native Obsidian right-sidebar view for chatting with your local LLMs while browsing and writing notes.
 - 🔗 **Local LM Studio Integration**: Connects directly to LM Studio's OpenAI-compatible server (defaults to `http://127.0.0.1:1234/v1`).
 - 🧠 **Reasoning Models & Thinking Block**: Native support for reasoning models (e.g., DeepSeek R1, GPT-OSS, QwQ) with collapsible **Thinking Process** accordions that capture `<think>` tags and streaming `reasoning_content` deltas.
 - 📋 **Active Note Context**: Automatically attaches your current active note as context for the query. Features a context pill with an `[×]` button to dismiss context at any time, and an attach button to re-attach whenever desired.
@@ -29,9 +27,9 @@ A GitHub Copilot-like right sidebar AI assistant for Obsidian that connects seam
 
 ### 2. Enable Plugin in Obsidian
 
-1. In Obsidian, go to **Settings** -> **Community plugins** -> Enable **LM Studio Personal**.
+1. In Obsidian, go to **Settings** -> **Community plugins** -> Enable **Aide**.
 2. Click the robot icon in the left ribbon or run the command **"Open sidebar"** from the Command Palette (`Ctrl/Cmd + P`).
-3. The panel will open in the right sidebar.
+3. The Aide panel will open in the right sidebar.
 
 ---
 

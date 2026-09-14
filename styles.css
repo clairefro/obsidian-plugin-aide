@@ -322,6 +322,13 @@
   overflow-y: auto;
 }
 
+.lm-copilot-reasoning-only-note {
+  font-style: italic;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 /* Message Actions */
 .lm-copilot-message-actions {
   display: flex;

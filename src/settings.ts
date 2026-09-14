@@ -6,15 +6,15 @@ import {
   DropdownComponent,
   Plugin,
 } from "obsidian";
-import { DEFAULT_SETTINGS, ILMStudioPlugin } from "./types";
+import { DEFAULT_SETTINGS, IAidePlugin } from "./types";
 import { LMStudioClient } from "./api/lmStudioClient";
 
-export class LMStudioSettingTab extends PluginSettingTab {
-  plugin: ILMStudioPlugin;
+export class AideSettingTab extends PluginSettingTab {
+  plugin: IAidePlugin;
   private modelDropdown: DropdownComponent | null = null;
   private connectionStatusEl: HTMLElement | null = null;
 
-  constructor(app: App, plugin: ILMStudioPlugin) {
+  constructor(app: App, plugin: IAidePlugin) {
     super(app, plugin as unknown as Plugin);
     this.plugin = plugin;
   }
@@ -23,7 +23,7 @@ export class LMStudioSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "LM Studio Personal Settings" });
+    containerEl.createEl("h2", { text: "Aide Settings" });
 
     // Server Configuration
     new Setting(containerEl)

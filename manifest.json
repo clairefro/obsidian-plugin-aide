@@ -1,9 +1,9 @@
 {
   "id": "obsidian-plugin-lm-studio-personal",
-  "name": "LM Studio Personal",
+  "name": "Aide",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
-  "description": "LM Studio Personal: right sidebar AI assistant powered by local LM Studio. Supports reasoning models, active note context, and conversation history.",
+  "description": "Aide: right sidebar AI assistant powered by local LM Studio. Supports reasoning models, active note context, and conversation history.",
   "author": "Obsidian User",
   "authorUrl": "",
   "fundingUrl": "",

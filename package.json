@@ -1,7 +1,7 @@
 {
   "name": "obsidian-plugin-lm-studio-personal",
   "version": "1.0.0",
-  "description": "LM Studio Personal - GitHub Copilot-like right sidebar AI assistant powered by local LM Studio server",
+  "description": "Aide - AI assistant powered by local LM Studio server",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -11,6 +11,7 @@
     "obsidian",
     "obsidian-plugin",
     "lm-studio",
+    "ollama",
     "copilot",
     "local-ai",
     "reasoning"

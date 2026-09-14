@@ -25,7 +25,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => LMStudioPersonalPlugin
+  default: () => AidePlugin
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian4 = require("obsidian");
@@ -34,9 +34,9 @@ var import_obsidian4 = require("obsidian");
 var DEFAULT_SETTINGS = {
   baseUrl: "http://127.0.0.1:1234/v1",
   selectedModel: "",
-  systemPrompt: "You are an expert AI assistant integrated into Obsidian as a Copilot. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
+  systemPrompt: "You are an expert AI assistant integrated into Obsidian as Aide. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
   temperature: 0.7,
-  maxTokens: 4096,
+  maxTokens: 8192,
   includeActiveNoteByDefault: true,
   maxContextChars: 24e3,
   autoTitleChat: true,
@@ -48,7 +48,7 @@ var DEFAULT_SETTINGS = {
 var import_obsidian = require("obsidian");
 
 // src/api/lmStudioClient.ts
-var LMStudioClient = class {
+var LMStudioClient = class _LMStudioClient {
   /**
    * Cleans the base URL by trimming trailing slashes and ensuring standard structure.
    */
@@ -101,6 +101,60 @@ var LMStudioClient = class {
     }
   }
   /**
+   * Intelligently parses mixed reasoning & answer text into separate parts.
+   */
+  static splitReasoningAndAnswer(rawText) {
+    if (!rawText) return { reasoning: "", answer: "" };
+    const text = rawText.trim();
+    const tagMatches = [
+      /<think>([\s\S]*?)<\/think>/i,
+      /<thought>([\s\S]*?)<\/thought>/i,
+      /<reasoning>([\s\S]*?)<\/reasoning>/i,
+      /<thinking>([\s\S]*?)<\/thinking>/i,
+      /<\|(?:start_of_thought|thought)\|>([\s\S]*?)<\|(?:end_of_thought|endofthought)\>/i,
+      /\[(?:thought|think|reasoning)\]([\s\S]*?)\[\/(?:thought|think|reasoning)\]/i,
+      /```(?:thought|think)([\s\S]*?)```/i,
+      /\|thought\|([\s\S]*?)\|\/thought\|/i
+    ];
+    for (const regex of tagMatches) {
+      const match = text.match(regex);
+      if (match && match.index !== void 0) {
+        const reasoning = match[1].trim();
+        const before = text.slice(0, match.index).trim();
+        const after = text.slice(match.index + match[0].length).trim();
+        const answer = [before, after].filter(Boolean).join("\n\n").trim();
+        if (answer) {
+          return { reasoning, answer };
+        }
+      }
+    }
+    const closingTagRegex = /(?:<\/think>|<\/thought>|<\/reasoning>|<\/thinking>|<\|endofthought\|>|<\|end_of_thought\|>|<\|im_end\|>|\[\/thought\]|\[\/think\]|\[\/reasoning\]|\|\/thought\||\|endofthought\||```\/thought)([\s\S]*)/i;
+    const closingMatch = text.match(closingTagRegex);
+    if (closingMatch && closingMatch[1] !== void 0 && closingMatch.index !== void 0) {
+      const reasoning = text.slice(0, closingMatch.index).trim();
+      const answer = closingMatch[1].trim();
+      if (answer) {
+        return { reasoning, answer };
+      }
+    }
+    const delimiterRegexes = [
+      /(?:\n|^)(?:---|\*\*\*)\s*\n+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)(?:Output|Result|Explanation)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i
+    ];
+    for (const regex of delimiterRegexes) {
+      const match = text.match(regex);
+      if (match && match.index !== void 0 && match[1]?.trim()) {
+        const reasoning = text.slice(0, match.index).trim();
+        const answer = match[1].trim();
+        if (reasoning.length > 10) {
+          return { reasoning, answer };
+        }
+      }
+    }
+    return { reasoning: "", answer: text };
+  }
+  /**
    * Streams chat completion from LM Studio.
    * Supports both delta.reasoning_content (OpenAI / DeepSeek / LM Studio native)
    * and in-stream <think>...</think> tags for standard llama / oss reasoning models.
@@ -116,6 +170,7 @@ var LMStudioClient = class {
     };
     if (params.maxTokens && params.maxTokens > 0) {
       bodyPayload.max_tokens = params.maxTokens;
+      bodyPayload.max_completion_tokens = params.maxTokens;
     }
     if (params.tools && params.tools.length > 0) {
       bodyPayload.tools = params.tools;
@@ -149,19 +204,195 @@ var LMStudioClient = class {
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+    let streamBuffer = "";
     let fullContent = "";
     let fullReasoning = "";
     let accumulatedToolCalls = [];
+    const START_TAGS = [
+      "<think>",
+      "<thought>",
+      "<reasoning>",
+      "<thinking>",
+      "<|thought|>",
+      "<|start_of_thought|>",
+      "[thought]",
+      "[think]",
+      "[reasoning]",
+      "|thought|",
+      "```thought",
+      "```think"
+    ];
+    const END_TAGS = [
+      "</think>",
+      "</thought>",
+      "</reasoning>",
+      "</thinking>",
+      "<|endofthought|>",
+      "<|end_of_thought|>",
+      "<|im_end|>",
+      "<|end|>",
+      "<|eot_id|>",
+      "[/thought]",
+      "[/think]",
+      "[/reasoning]",
+      "|/thought|",
+      "|endofthought|",
+      "```/thought",
+      "```end_of_thought",
+      "\n\nfinal answer:",
+      "\n\n**final answer:**",
+      "\n\n### final answer",
+      "\n\nanswer:",
+      "\n\n**answer:**",
+      "\n\n### answer"
+    ];
     let inThinkBlock = false;
-    let tagBuffer = "";
+    let pendingContent = "";
+    const processContentBuffer = (forceFlush = false) => {
+      while (pendingContent.length > 0) {
+        const lowerPending = pendingContent.toLowerCase();
+        if (!inThinkBlock) {
+          let earliestIdx = -1;
+          let matchedTagLen = 0;
+          for (const tag of START_TAGS) {
+            const idx = lowerPending.indexOf(tag);
+            if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
+              earliestIdx = idx;
+              matchedTagLen = tag.length;
+            }
+          }
+          if (earliestIdx !== -1) {
+            const before = pendingContent.slice(0, earliestIdx);
+            if (before) {
+              fullContent += before;
+              params.onToken(before, "");
+            }
+            inThinkBlock = true;
+            pendingContent = pendingContent.slice(earliestIdx + matchedTagLen);
+          } else {
+            if (forceFlush) {
+              fullContent += pendingContent;
+              params.onToken(pendingContent, "");
+              pendingContent = "";
+              break;
+            }
+            let longestPrefixLen = 0;
+            for (const tag of START_TAGS) {
+              for (let len = Math.min(tag.length - 1, pendingContent.length); len >= 1; len--) {
+                if (lowerPending.endsWith(tag.slice(0, len))) {
+                  if (len > longestPrefixLen) {
+                    longestPrefixLen = len;
+                  }
+                }
+              }
+            }
+            if (longestPrefixLen > 0) {
+              const safeText = pendingContent.slice(
+                0,
+                pendingContent.length - longestPrefixLen
+              );
+              if (safeText) {
+                fullContent += safeText;
+                params.onToken(safeText, "");
+              }
+              pendingContent = pendingContent.slice(
+                pendingContent.length - longestPrefixLen
+              );
+              break;
+            } else {
+              fullContent += pendingContent;
+              params.onToken(pendingContent, "");
+              pendingContent = "";
+              break;
+            }
+          }
+        } else {
+          let earliestIdx = -1;
+          let matchedTagLen = 0;
+          let isAnswerSeparator = false;
+          for (const tag of END_TAGS) {
+            const idx = lowerPending.indexOf(tag);
+            if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
+              earliestIdx = idx;
+              matchedTagLen = tag.length;
+              if (tag.includes("answer")) {
+                isAnswerSeparator = true;
+              }
+            }
+          }
+          if (earliestIdx !== -1) {
+            const before = pendingContent.slice(0, earliestIdx);
+            if (before) {
+              fullReasoning += before;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(before);
+              }
+              params.onToken("", before);
+            }
+            inThinkBlock = false;
+            if (isAnswerSeparator) {
+              pendingContent = pendingContent.slice(earliestIdx);
+            } else {
+              pendingContent = pendingContent.slice(
+                earliestIdx + matchedTagLen
+              );
+            }
+          } else {
+            if (forceFlush) {
+              fullReasoning += pendingContent;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(pendingContent);
+              }
+              params.onToken("", pendingContent);
+              pendingContent = "";
+              break;
+            }
+            let longestPrefixLen = 0;
+            for (const tag of END_TAGS) {
+              for (let len = Math.min(tag.length - 1, pendingContent.length); len >= 1; len--) {
+                if (lowerPending.endsWith(tag.slice(0, len))) {
+                  if (len > longestPrefixLen) {
+                    longestPrefixLen = len;
+                  }
+                }
+              }
+            }
+            if (longestPrefixLen > 0) {
+              const safeText = pendingContent.slice(
+                0,
+                pendingContent.length - longestPrefixLen
+              );
+              if (safeText) {
+                fullReasoning += safeText;
+                if (params.onReasoningToken) {
+                  params.onReasoningToken(safeText);
+                }
+                params.onToken("", safeText);
+              }
+              pendingContent = pendingContent.slice(
+                pendingContent.length - longestPrefixLen
+              );
+              break;
+            } else {
+              fullReasoning += pendingContent;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(pendingContent);
+              }
+              params.onToken("", pendingContent);
+              pendingContent = "";
+              break;
+            }
+          }
+        }
+      }
+    };
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split("\n");
+        streamBuffer = lines.pop() ?? "";
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith(":")) continue;
@@ -175,10 +406,9 @@ var LMStudioClient = class {
               const parsed = JSON.parse(jsonStr);
               const choice = parsed.choices?.[0];
               if (!choice) continue;
-              const delta = choice.delta;
-              if (!delta) continue;
-              const reasoningDelta = delta.reasoning_content || delta.reasoning;
-              if (reasoningDelta) {
+              const delta = choice.delta || {};
+              const reasoningDelta = delta.reasoning_content ?? delta.reasoning ?? delta.thought ?? delta.thinking ?? choice.message?.reasoning_content ?? choice.message?.reasoning;
+              if (reasoningDelta && typeof reasoningDelta === "string") {
                 fullReasoning += reasoningDelta;
                 if (params.onReasoningToken) {
                   params.onReasoningToken(reasoningDelta);
@@ -191,63 +421,28 @@ var LMStudioClient = class {
                   params.onToolCallChunk(delta.tool_calls);
                 }
               }
-              const contentDelta = delta.content;
-              if (contentDelta) {
-                let currentText = contentDelta;
-                while (currentText.length > 0) {
-                  if (!inThinkBlock) {
-                    const thinkStartIdx = currentText.indexOf("<think>");
-                    if (thinkStartIdx !== -1) {
-                      const before = currentText.slice(0, thinkStartIdx);
-                      if (before) {
-                        fullContent += before;
-                        params.onToken(before, "");
-                      }
-                      inThinkBlock = true;
-                      currentText = currentText.slice(thinkStartIdx + 7);
-                    } else {
-                      if (currentText.endsWith("<") || currentText.endsWith("<t") || currentText.endsWith("<th") || currentText.endsWith("<thi") || currentText.endsWith("<thin") || currentText.endsWith("<think")) {
-                        const lastLt = currentText.lastIndexOf("<");
-                        const safePart = currentText.slice(0, lastLt);
-                        tagBuffer = currentText.slice(lastLt);
-                        if (safePart) {
-                          fullContent += safePart;
-                          params.onToken(safePart, "");
-                        }
-                        currentText = "";
-                      } else {
-                        fullContent += currentText;
-                        params.onToken(currentText, "");
-                        currentText = "";
-                      }
-                    }
-                  } else {
-                    const thinkEndIdx = currentText.indexOf("</think>");
-                    if (thinkEndIdx !== -1) {
-                      const thinkContent = currentText.slice(0, thinkEndIdx);
-                      if (thinkContent) {
-                        fullReasoning += thinkContent;
-                        if (params.onReasoningToken) {
-                          params.onReasoningToken(thinkContent);
-                        }
-                        params.onToken("", thinkContent);
-                      }
-                      inThinkBlock = false;
-                      currentText = currentText.slice(thinkEndIdx + 8);
-                    } else {
-                      fullReasoning += currentText;
-                      if (params.onReasoningToken) {
-                        params.onReasoningToken(currentText);
-                      }
-                      params.onToken("", currentText);
-                      currentText = "";
-                    }
-                  }
-                }
+              const rawContent = delta.content ?? choice.message?.content ?? (typeof choice.text === "string" ? choice.text : null);
+              if (rawContent && typeof rawContent === "string") {
+                pendingContent += rawContent;
+                processContentBuffer(false);
               }
             } catch (parseErr) {
             }
           }
+        }
+      }
+      processContentBuffer(true);
+      if (!fullContent.trim() && fullReasoning.trim()) {
+        const split = _LMStudioClient.splitReasoningAndAnswer(fullReasoning);
+        if (split.answer && split.answer !== fullReasoning) {
+          fullContent = split.answer;
+          fullReasoning = split.reasoning;
+        }
+      } else if (fullContent.trim() && !fullReasoning.trim()) {
+        const split = _LMStudioClient.splitReasoningAndAnswer(fullContent);
+        if (split.reasoning && split.answer) {
+          fullContent = split.answer;
+          fullReasoning = split.reasoning;
         }
       }
     } finally {
@@ -262,7 +457,7 @@ var LMStudioClient = class {
 };
 
 // src/settings.ts
-var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
+var AideSettingTab = class extends import_obsidian.PluginSettingTab {
   plugin;
   modelDropdown = null;
   connectionStatusEl = null;
@@ -273,7 +468,7 @@ var LMStudioSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "LM Studio Personal Settings" });
+    containerEl.createEl("h2", { text: "Aide Settings" });
     new import_obsidian.Setting(containerEl).setName("LM Studio Base URL").setDesc(
       "The base URL of your local LM Studio server (usually http://127.0.0.1:1234/v1)."
     ).addText(
@@ -596,8 +791,8 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
 };
 
 // src/views/ChatView.ts
-var LM_STUDIO_VIEW_TYPE = "lm-studio-copilot-view";
-var LMStudioChatView = class extends import_obsidian3.ItemView {
+var AIDE_VIEW_TYPE = "aide-chat-view";
+var AideChatView = class extends import_obsidian3.ItemView {
   plugin;
   // UI Elements
   headerEl;
@@ -621,10 +816,10 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     this.currentConversation = this.createNewConversation();
   }
   getViewType() {
-    return LM_STUDIO_VIEW_TYPE;
+    return AIDE_VIEW_TYPE;
   }
   getDisplayText() {
-    return "LM Studio Personal";
+    return "Aide";
   }
   getIcon() {
     return "bot";
@@ -715,7 +910,7 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     this.inputEl = inputWrapper.createEl("textarea", {
       cls: "lm-copilot-textarea",
       attr: {
-        placeholder: "Ask Copilot... (Shift+Enter for newline)",
+        placeholder: "Ask Aide... (Shift+Enter for newline)",
         rows: "1"
       }
     });
@@ -912,7 +1107,7 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
       });
       const iconEl = emptyStateEl.createDiv({ cls: "lm-copilot-empty-icon" });
       (0, import_obsidian3.setIcon)(iconEl, "sparkles");
-      emptyStateEl.createEl("h3", { text: "LM Studio Personal" });
+      emptyStateEl.createEl("h3", { text: "Aide" });
       emptyStateEl.createEl("p", {
         text: "Ask questions, brainstorm ideas, analyze notes, or write content with your local LLMs."
       });
@@ -923,13 +1118,70 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     }
     this.scrollToBottom();
   }
+  getOrCreateReasoningElements(msgEl) {
+    let container = msgEl.querySelector(
+      ".lm-copilot-reasoning-container"
+    );
+    if (!container) {
+      container = msgEl.createDiv({
+        cls: "lm-copilot-reasoning-container"
+      });
+      const headerEl = msgEl.querySelector(".lm-copilot-message-header");
+      if (headerEl && headerEl.nextSibling && headerEl.nextSibling !== container) {
+        msgEl.insertBefore(container, headerEl.nextSibling);
+      }
+    }
+    if (!this.plugin.settings.showReasoning && !this.isGenerating) {
+      container.addClass("is-hidden");
+    } else {
+      container.removeClass("is-hidden");
+    }
+    let details = container.querySelector(
+      ".lm-copilot-reasoning-details"
+    );
+    if (!details) {
+      details = container.createEl("details", {
+        cls: "lm-copilot-reasoning-details"
+      });
+    }
+    let summary = details.querySelector(
+      ".lm-copilot-reasoning-summary"
+    );
+    let summaryTitle;
+    if (!summary) {
+      summary = details.createEl("summary", {
+        cls: "lm-copilot-reasoning-summary"
+      });
+      const brainIcon = summary.createSpan({
+        cls: "lm-copilot-reasoning-icon"
+      });
+      (0, import_obsidian3.setIcon)(brainIcon, "cpu");
+      summaryTitle = summary.createSpan({
+        cls: "lm-copilot-reasoning-title",
+        text: "Thinking Process"
+      });
+    } else {
+      summaryTitle = summary.querySelector(
+        ".lm-copilot-reasoning-title"
+      );
+    }
+    let body = details.querySelector(
+      ".lm-copilot-reasoning-body"
+    );
+    if (!body) {
+      body = details.createDiv({
+        cls: "lm-copilot-reasoning-body"
+      });
+    }
+    return { container, details, summary, summaryTitle, body };
+  }
   renderMessageElement(msg) {
     const msgEl = this.messagesContainerEl.createDiv({
       cls: `lm-copilot-message lm-copilot-message-${msg.role}`
     });
     msgEl.dataset.messageId = msg.id;
     const headerEl = msgEl.createDiv({ cls: "lm-copilot-message-header" });
-    const roleName = msg.role === "user" ? "You" : "Copilot";
+    const roleName = msg.role === "user" ? "You" : "Aide";
     headerEl.createSpan({ cls: "lm-copilot-message-author", text: roleName });
     if (msg.role === "user" && msg.contextIncluded) {
       const contextBadge = headerEl.createSpan({
@@ -939,34 +1191,12 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
       contextBadge.createSpan({ text: msg.contextIncluded.title });
       contextBadge.title = `Attached note: ${msg.contextIncluded.path}`;
     }
-    if (msg.role === "assistant" && (msg.reasoningContent || this.isGenerating)) {
-      const reasoningContainer = msgEl.createDiv({
-        cls: "lm-copilot-reasoning-container"
-      });
-      if (!this.plugin.settings.showReasoning && !this.isGenerating) {
-        reasoningContainer.addClass("is-hidden");
+    if (msg.role === "assistant" && msg.reasoningContent) {
+      const reasoningElements = this.getOrCreateReasoningElements(msgEl);
+      reasoningElements.body.setText(msg.reasoningContent);
+      if (!msg.content) {
+        reasoningElements.details.open = true;
       }
-      const detailsEl = reasoningContainer.createEl("details", {
-        cls: "lm-copilot-reasoning-details"
-      });
-      if (this.isGenerating && !msg.content) {
-        detailsEl.open = true;
-      }
-      const summaryEl = detailsEl.createEl("summary", {
-        cls: "lm-copilot-reasoning-summary"
-      });
-      const brainIcon = summaryEl.createSpan({
-        cls: "lm-copilot-reasoning-icon"
-      });
-      (0, import_obsidian3.setIcon)(brainIcon, "cpu");
-      summaryEl.createSpan({
-        cls: "lm-copilot-reasoning-title",
-        text: "Thinking Process"
-      });
-      const reasoningBodyEl = detailsEl.createDiv({
-        cls: "lm-copilot-reasoning-body",
-        text: msg.reasoningContent || ""
-      });
     }
     const bodyEl = msgEl.createDiv({
       cls: "lm-copilot-message-body markdown-rendered"
@@ -979,6 +1209,11 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
         this.activeContext?.path || "",
         this
       );
+    } else if (msg.role === "assistant" && msg.reasoningContent) {
+      bodyEl.createEl("p", {
+        cls: "lm-copilot-reasoning-only-note",
+        text: "(Model completed with reasoning output above)"
+      });
     }
     const actionsEl = msgEl.createDiv({ cls: "lm-copilot-message-actions" });
     const copyBtn = actionsEl.createEl("button", {
@@ -987,7 +1222,8 @@ var LMStudioChatView = class extends import_obsidian3.ItemView {
     });
     (0, import_obsidian3.setIcon)(copyBtn, "copy");
     copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(msg.content);
+      const textToCopy = msg.content || msg.reasoningContent || "";
+      await navigator.clipboard.writeText(textToCopy);
       new import_obsidian3.Notice("Copied message to clipboard!");
       (0, import_obsidian3.setIcon)(copyBtn, "check");
       setTimeout(() => (0, import_obsidian3.setIcon)(copyBtn, "copy"), 1500);
@@ -1058,10 +1294,13 @@ ${m.content}`;
       } else if (m.role === "assistant") {
         apiMessages.push({
           role: "assistant",
-          content: m.content
+          content: m.content || m.reasoningContent || ""
         });
       }
     }
+    this.isGenerating = true;
+    this.setGeneratingUI(true);
+    this.currentAbortController = new AbortController();
     const assistantMsg = {
       id: "msg_" + Date.now() + "_a",
       role: "assistant",
@@ -1071,27 +1310,15 @@ ${m.content}`;
     };
     this.currentConversation.messages.push(assistantMsg);
     const assistantMsgEl = this.renderMessageElement(assistantMsg);
-    const reasoningContainer = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-container"
-    );
-    const reasoningDetails = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-details"
-    );
-    const reasoningBody = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-body"
-    );
     const bodyEl = assistantMsgEl.querySelector(
       ".lm-copilot-message-body"
     );
     this.scrollToBottom();
-    this.isGenerating = true;
-    this.setGeneratingUI(true);
-    this.currentAbortController = new AbortController();
     let accumulatedContent = "";
     let accumulatedReasoning = "";
     let lastRenderTime = 0;
     try {
-      this.statusEl.setText("Generating response...");
+      this.statusEl.setText("Connecting to model...");
       const result = await LMStudioClient.streamChat({
         baseUrl: this.plugin.settings.baseUrl,
         model,
@@ -1102,15 +1329,31 @@ ${m.content}`;
         onToken: (contentChunk, reasoningChunk) => {
           if (reasoningChunk) {
             accumulatedReasoning += reasoningChunk;
-            if (reasoningBody) {
-              reasoningBody.setText(accumulatedReasoning);
+            const elements = this.getOrCreateReasoningElements(assistantMsgEl);
+            elements.body.setText(accumulatedReasoning);
+            if (!elements.details.open) {
+              elements.details.open = true;
             }
-            if (reasoningDetails && !reasoningDetails.open) {
-              reasoningDetails.open = true;
+            if (!accumulatedContent) {
+              this.statusEl.setText("Thinking...");
+              elements.summaryTitle.setText("Thinking...");
             }
+            this.scrollToBottom();
           }
           if (contentChunk) {
             accumulatedContent += contentChunk;
+            this.statusEl.setText("Generating response...");
+            const reasoningElements = assistantMsgEl.querySelector(
+              ".lm-copilot-reasoning-container"
+            );
+            if (reasoningElements) {
+              const summaryTitle = reasoningElements.querySelector(
+                ".lm-copilot-reasoning-title"
+              );
+              if (summaryTitle) {
+                summaryTitle.setText("Thinking Process");
+              }
+            }
             const now = Date.now();
             if (now - lastRenderTime > 80) {
               bodyEl.empty();
@@ -1127,24 +1370,61 @@ ${m.content}`;
           }
         }
       });
-      assistantMsg.content = result.fullContent || accumulatedContent;
-      assistantMsg.reasoningContent = result.fullReasoning || accumulatedReasoning;
-      bodyEl.empty();
-      await import_obsidian3.MarkdownRenderer.render(
-        this.app,
-        assistantMsg.content,
-        bodyEl,
-        this.activeContext?.path || "",
-        this
+      assistantMsg.content = (result.fullContent || accumulatedContent).trim();
+      assistantMsg.reasoningContent = (result.fullReasoning || accumulatedReasoning).trim();
+      if (assistantMsg.reasoningContent && !assistantMsg.content) {
+        const split = LMStudioClient.splitReasoningAndAnswer(
+          assistantMsg.reasoningContent
+        );
+        if (split.answer && split.reasoning) {
+          assistantMsg.content = split.answer;
+          assistantMsg.reasoningContent = split.reasoning;
+        }
+      } else if (assistantMsg.content && !assistantMsg.reasoningContent) {
+        const split = LMStudioClient.splitReasoningAndAnswer(
+          assistantMsg.content
+        );
+        if (split.reasoning && split.answer) {
+          assistantMsg.content = split.answer;
+          assistantMsg.reasoningContent = split.reasoning;
+        }
+      }
+      const reasoningEl = assistantMsgEl.querySelector(
+        ".lm-copilot-reasoning-container"
       );
-      if (reasoningDetails && assistantMsg.content) {
-        reasoningDetails.open = false;
+      if (assistantMsg.reasoningContent) {
+        const elements = this.getOrCreateReasoningElements(assistantMsgEl);
+        elements.body.setText(assistantMsg.reasoningContent);
+        elements.summaryTitle.setText("Thinking Process");
+        elements.details.open = !assistantMsg.content;
+        if (!this.plugin.settings.showReasoning) {
+          elements.container.addClass("is-hidden");
+        } else {
+          elements.container.removeClass("is-hidden");
+        }
+      } else if (reasoningEl) {
+        reasoningEl.addClass("is-hidden");
+      }
+      bodyEl.empty();
+      if (!assistantMsg.content && assistantMsg.reasoningContent) {
+        bodyEl.createEl("p", {
+          cls: "lm-copilot-reasoning-only-note",
+          text: "\u{1F4A1} Model finished thinking but produced no separate final response. (If generation was cut short, try increasing 'Max Output Tokens' in Settings)."
+        });
+      } else {
+        await import_obsidian3.MarkdownRenderer.render(
+          this.app,
+          assistantMsg.content,
+          bodyEl,
+          this.activeContext?.path || "",
+          this
+        );
       }
     } catch (err) {
       if (err.name === "AbortError" || this.currentAbortController?.signal.aborted) {
         assistantMsg.content = accumulatedContent + "\n\n*[Generation stopped by user]*";
       } else {
-        console.error("[LM Studio Copilot] Stream error:", err);
+        console.error("[Aide] Stream error:", err);
         assistantMsg.content = accumulatedContent + `
 
 > \u26A0\uFE0F **Error:** ${err.message || "Failed to communicate with LM Studio."}`;
@@ -1201,28 +1481,28 @@ ${m.content}`;
 };
 
 // src/main.ts
-var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
+var AidePlugin = class extends import_obsidian4.Plugin {
   settings = DEFAULT_SETTINGS;
   conversations = [];
   currentConversationId = "";
   cachedModels = [];
   async onload() {
-    console.log("[LM Studio Personal] Loading plugin");
+    console.log("[Aide] Loading plugin");
     await this.loadPluginData();
     this.registerView(
-      LM_STUDIO_VIEW_TYPE,
-      (leaf) => new LMStudioChatView(leaf, this)
+      AIDE_VIEW_TYPE,
+      (leaf) => new AideChatView(leaf, this)
     );
-    this.addRibbonIcon("bot", "Open LM Studio Personal", () => {
+    this.addRibbonIcon("bot", "Open Aide", () => {
       this.activateView();
     });
     this.addCommand({
-      id: "open-lm-studio-personal-view",
+      id: "open-aide-view",
       name: "Open sidebar",
       callback: () => this.activateView()
     });
     this.addCommand({
-      id: "new-lm-studio-chat",
+      id: "new-aide-chat",
       name: "New chat session",
       callback: async () => {
         await this.activateView();
@@ -1233,7 +1513,7 @@ var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
       }
     });
     this.addCommand({
-      id: "view-lm-studio-chat-history",
+      id: "view-aide-chat-history",
       name: "View chat history",
       callback: () => {
         new ChatHistoryModal(
@@ -1270,7 +1550,7 @@ var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
         }
       }
     });
-    this.addSettingTab(new LMStudioSettingTab(this.app, this));
+    this.addSettingTab(new AideSettingTab(this.app, this));
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
         this.updateContextInViews();
@@ -1279,7 +1559,7 @@ var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
     this.fetchModelsInBackground();
   }
   async onunload() {
-    this.app.workspace.detachLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(AIDE_VIEW_TYPE);
   }
   // -------------------------------------------------------------
   // View Lifecycle & Helpers
@@ -1287,14 +1567,14 @@ var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
   async activateView() {
     const { workspace } = this.app;
     let leaf = null;
-    const leaves = workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     if (leaves.length > 0) {
       leaf = leaves[0];
     } else {
       leaf = workspace.getRightLeaf(false);
       if (leaf) {
         await leaf.setViewState({
-          type: LM_STUDIO_VIEW_TYPE,
+          type: AIDE_VIEW_TYPE,
           active: true
         });
       }
@@ -1304,24 +1584,24 @@ var LMStudioPersonalPlugin = class extends import_obsidian4.Plugin {
     }
   }
   getActiveChatView() {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     if (leaves.length > 0) {
       return leaves[0].view;
     }
     return null;
   }
   updateContextInViews() {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     for (const leaf of leaves) {
-      if (leaf.view instanceof LMStudioChatView) {
+      if (leaf.view instanceof AideChatView) {
         leaf.view.updateActiveFileContext();
       }
     }
   }
   updateModelInViews(modelId) {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     for (const leaf of leaves) {
-      if (leaf.view instanceof LMStudioChatView) {
+      if (leaf.view instanceof AideChatView) {
         leaf.view.updateModelDropdown(modelId);
       }
     }

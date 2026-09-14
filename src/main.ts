@@ -5,8 +5,8 @@ import {
   Conversation,
   LMStudioModel,
 } from "./types";
-import { LMStudioSettingTab } from "./settings";
-import { LMStudioChatView, LM_STUDIO_VIEW_TYPE } from "./views/ChatView";
+import { AideSettingTab } from "./settings";
+import { AideChatView, AIDE_VIEW_TYPE } from "./views/ChatView";
 import { LMStudioClient } from "./api/lmStudioClient";
 import { ChatHistoryModal } from "./views/HistoryModal";
 
@@ -15,36 +15,36 @@ interface PluginData {
   conversations: Conversation[];
 }
 
-export default class LMStudioPersonalPlugin extends Plugin {
+export default class AidePlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
   conversations: Conversation[] = [];
   currentConversationId: string = "";
   cachedModels: LMStudioModel[] = [];
 
   async onload(): Promise<void> {
-    console.log("[LM Studio Personal] Loading plugin");
+    console.log("[Aide] Loading plugin");
     await this.loadPluginData();
 
     // Register Sidebar View
     this.registerView(
-      LM_STUDIO_VIEW_TYPE,
-      (leaf) => new LMStudioChatView(leaf, this),
+      AIDE_VIEW_TYPE,
+      (leaf) => new AideChatView(leaf, this),
     );
 
     // Ribbon Icon to open sidebar
-    this.addRibbonIcon("bot", "Open LM Studio Personal", () => {
+    this.addRibbonIcon("bot", "Open Aide", () => {
       this.activateView();
     });
 
     // Commands
     this.addCommand({
-      id: "open-lm-studio-personal-view",
+      id: "open-aide-view",
       name: "Open sidebar",
       callback: () => this.activateView(),
     });
 
     this.addCommand({
-      id: "new-lm-studio-chat",
+      id: "new-aide-chat",
       name: "New chat session",
       callback: async () => {
         await this.activateView();
@@ -56,7 +56,7 @@ export default class LMStudioPersonalPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "view-lm-studio-chat-history",
+      id: "view-aide-chat-history",
       name: "View chat history",
       callback: () => {
         new ChatHistoryModal(
@@ -96,7 +96,7 @@ export default class LMStudioPersonalPlugin extends Plugin {
     });
 
     // Settings Tab
-    this.addSettingTab(new LMStudioSettingTab(this.app, this));
+    this.addSettingTab(new AideSettingTab(this.app, this));
 
     // Listen to active leaf change to automatically update active note context
     this.registerEvent(
@@ -110,7 +110,7 @@ export default class LMStudioPersonalPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
-    this.app.workspace.detachLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(AIDE_VIEW_TYPE);
   }
 
   // -------------------------------------------------------------
@@ -120,7 +120,7 @@ export default class LMStudioPersonalPlugin extends Plugin {
   async activateView(): Promise<void> {
     const { workspace } = this.app;
     let leaf: WorkspaceLeaf | null = null;
-    const leaves = workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = workspace.getLeavesOfType(AIDE_VIEW_TYPE);
 
     if (leaves.length > 0) {
       leaf = leaves[0];
@@ -129,7 +129,7 @@ export default class LMStudioPersonalPlugin extends Plugin {
       leaf = workspace.getRightLeaf(false);
       if (leaf) {
         await leaf.setViewState({
-          type: LM_STUDIO_VIEW_TYPE,
+          type: AIDE_VIEW_TYPE,
           active: true,
         });
       }
@@ -140,27 +140,27 @@ export default class LMStudioPersonalPlugin extends Plugin {
     }
   }
 
-  public getActiveChatView(): LMStudioChatView | null {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+  public getActiveChatView(): AideChatView | null {
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     if (leaves.length > 0) {
-      return leaves[0].view as LMStudioChatView;
+      return leaves[0].view as AideChatView;
     }
     return null;
   }
 
   public updateContextInViews(): void {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     for (const leaf of leaves) {
-      if (leaf.view instanceof LMStudioChatView) {
+      if (leaf.view instanceof AideChatView) {
         leaf.view.updateActiveFileContext();
       }
     }
   }
 
   public updateModelInViews(modelId: string): void {
-    const leaves = this.app.workspace.getLeavesOfType(LM_STUDIO_VIEW_TYPE);
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
     for (const leaf of leaves) {
-      if (leaf.view instanceof LMStudioChatView) {
+      if (leaf.view instanceof AideChatView) {
         leaf.view.updateModelDropdown(modelId);
       }
     }

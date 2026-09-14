@@ -8,7 +8,8 @@
     "includeActiveNoteByDefault": true,
     "maxContextChars": 24000,
     "autoTitleChat": true,
-    "showReasoning": true
+    "showReasoning": true,
+    "saveChatHistory": true
   },
   "conversations": [
     {
@@ -136,6 +137,132 @@
           "content": "Oh wow! So you're wondering about the number of plums? \n\nWell, I can tell you that there isn't any plum mentioned in your testing note. However, I can provide you with some fun facts about plums!\n\nAccording to various sources, a standard plum fruit typically weighs around 30-40 grams and contains between 1 and 2 seeds.\n\nIf you're interested in knowing more about the nutritional values of plums, here's a rough breakdown:\n\n* Calories: 60\n* Fat: 0.3g\n* Carbohydrates: 15.4g\n* Fiber: 2.3g\n* Sugar: 13.8g\n* Protein: 1.5g\n\nWould you like me to elaborate on this topic further?",
           "reasoningContent": "",
           "timestamp": 1789422134385
+        }
+      ],
+      "model": "llama-3-8b-lexi-uncensored"
+    },
+    {
+      "id": "conv_1789425001025_ovv9u",
+      "title": "how many plums",
+      "createdAt": 1789425001025,
+      "updatedAt": 1789425138310,
+      "messages": [
+        {
+          "id": "msg_1789425136252_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789425136252,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789425136256_a",
+          "role": "assistant",
+          "content": "",
+          "reasoningContent": "We have a note with some fruit list: one banana, two apples, five peaches. The user asks: \"how many plums\". There's no mention of plums in the note. So answer: zero or unknown? We can say that there's no mention of plums. Also maybe ask for clarification. According to instructions we should format responses cleanly with markdown. Provide a brief answer.",
+          "timestamp": 1789425136256
+        }
+      ],
+      "model": "gpt-oss-20b"
+    },
+    {
+      "id": "conv_1789425300644_6fsjl",
+      "title": "test",
+      "createdAt": 1789425300644,
+      "updatedAt": 1789425308376,
+      "messages": [
+        {
+          "id": "msg_1789425303562_u",
+          "role": "user",
+          "content": "test",
+          "timestamp": 1789425303562,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789425303565_a",
+          "role": "assistant",
+          "content": "The user says \"test\". They provided a note content with some text. Maybe they want to test the assistant's response? There's no clear question. Perhaps they want me to respond in context of that note, maybe summarizing or something? The instructions say: help research, summarize, structure, brainstorm, write, refine knowledge notes. Format responses cleanly using Markdown. They gave a note \"testing\" containing \"one banana, two apples, five peaches\". Then user says \"test\". Possibly they want to test the assistant's ability to process the note. Maybe respond with something relevant like a summary or structured representation of that note.\n\nWe can interpret as: They want me to transform the content into a more structured format? Or maybe it's just a test and I should say \"Got it\" or show an example of how I'd handle such notes. The instructions: If context from an Obsidian note is provided, refer to it accurately. So we should reference that note. We can create a summary like:\n\n- Fruits counted:\n  - banana: 1\n  - apples: 2\n  - peaches: 5\n\nWe could also show a table. Let's provide a minimal structured response with heading \"Test Note Summary\". Also maybe ask if they'd like anything else.\n\nThus respond in markdown, mention the note name and content.",
+          "reasoningContent": "The user says \"test\". They provided a note content with some text. Maybe they want to test the assistant's response? There's no clear question. Perhaps they want me to respond in context of that note, maybe summarizing or something? The instructions say: help research, summarize, structure, brainstorm, write, refine knowledge notes. Format responses cleanly using Markdown. They gave a note \"testing\" containing \"one banana, two apples, five peaches\". Then user says \"test\". Possibly they want to test the assistant's ability to process the note. Maybe respond with something relevant like a summary or structured representation of that note.\n\nWe can interpret as: They want me to transform the content into a more structured format? Or maybe it's just a test and I should say \"Got it\" or show an example of how I'd handle such notes. The instructions: If context from an Obsidian note is provided, refer to it accurately. So we should reference that note. We can create a summary like:\n\n- Fruits counted:\n  - banana: 1\n  - apples: 2\n  - peaches: 5\n\nWe could also show a table. Let's provide a minimal structured response with heading \"Test Note Summary\". Also maybe ask if they'd like anything else.\n\nThus respond in markdown, mention the note name and content.",
+          "timestamp": 1789425303565
+        }
+      ],
+      "model": "gpt-oss-20b"
+    },
+    {
+      "id": "conv_1789425521705_5t9zz",
+      "title": "how many plums",
+      "createdAt": 1789425521705,
+      "updatedAt": 1789425527571,
+      "messages": [
+        {
+          "id": "msg_1789425525423_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789425525423,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789425525429_a",
+          "role": "assistant",
+          "content": "We need to answer the question: \"how many plums\". The note says only bananas, apples, peaches. No plums mentioned. So likely zero or unknown? In a knowledge base context, we might respond that no plums are listed in this note. Provide concise response. Use markdown.\n\nAlso maybe mention that no plums appear in the list. Should I ask if they want to add? But question is straightforward. Let's answer: 0 plums. Provide explanation.",
+          "reasoningContent": "",
+          "timestamp": 1789425525429
+        }
+      ],
+      "model": "gpt-oss-20b"
+    },
+    {
+      "id": "conv_1789425736076_piktv",
+      "title": "how many plums",
+      "createdAt": 1789425736076,
+      "updatedAt": 1789425848025,
+      "messages": [
+        {
+          "id": "msg_1789425739125_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789425739125,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789425739132_a",
+          "role": "assistant",
+          "content": "",
+          "reasoningContent": "The user has a current note \"testing\" with content: \"one banana, two apples, five peaches\". They ask: \"how many plums\". There's no mention of plums in the note. The question likely expects that there are zero plums because none are listed. We should respond accordingly.\n\nWe need to format responses cleanly using Markdown. Possibly include a table or list showing fruit counts. Provide answer: 0 plums. Also maybe ask for clarification? The user didn't specify further context. So we can say \"There are no plums mentioned in the current note, so count is zero.\" That should suffice.\n\nWe might also show a quick summary of the note's fruit counts to provide context. Use bullet list or table.\n\nLet's produce final answer accordingly.",
+          "timestamp": 1789425739132
+        },
+        {
+          "id": "msg_1789425845038_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789425845038,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789425845042_a",
+          "role": "assistant",
+          "content": "Here is the answer:\n\nThere are no plums mentioned in the current note \"testing\". So, count is zero.\n\nHere's a quick summary of the fruit counts:\n\n| Fruit | Count |\n| --- | --- |\n| Banana | 1 |\n| Apples | 2 |\n| Peaches | 5 |\n\nPlease clarify if you'd like to add more fruit to this list or discuss further.",
+          "reasoningContent": "",
+          "timestamp": 1789425845042
         }
       ],
       "model": "llama-3-8b-lexi-uncensored"

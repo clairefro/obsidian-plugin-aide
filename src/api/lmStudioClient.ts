@@ -58,6 +58,79 @@ export class LMStudioClient {
   }
 
   /**
+   * Intelligently parses mixed reasoning & answer text into separate parts.
+   */
+  static splitReasoningAndAnswer(rawText: string): {
+    reasoning: string;
+    answer: string;
+  } {
+    if (!rawText) return { reasoning: "", answer: "" };
+
+    const text = rawText.trim();
+
+    // 1. Explicit tag pairs: <think>...</think>, <thought>...</thought>, [thought]...[/thought], etc.
+    const tagMatches = [
+      /<think>([\s\S]*?)<\/think>/i,
+      /<thought>([\s\S]*?)<\/thought>/i,
+      /<reasoning>([\s\S]*?)<\/reasoning>/i,
+      /<thinking>([\s\S]*?)<\/thinking>/i,
+      /<\|(?:start_of_thought|thought)\|>([\s\S]*?)<\|(?:end_of_thought|endofthought)\>/i,
+      /\[(?:thought|think|reasoning)\]([\s\S]*?)\[\/(?:thought|think|reasoning)\]/i,
+      /```(?:thought|think)([\s\S]*?)```/i,
+      /\|thought\|([\s\S]*?)\|\/thought\|/i,
+    ];
+
+    for (const regex of tagMatches) {
+      const match = text.match(regex);
+      if (match && match.index !== undefined) {
+        const reasoning = match[1].trim();
+        const before = text.slice(0, match.index).trim();
+        const after = text.slice(match.index + match[0].length).trim();
+        const answer = [before, after].filter(Boolean).join("\n\n").trim();
+        if (answer) {
+          return { reasoning, answer };
+        }
+      }
+    }
+
+    // 2. Explicit closing tags without opening tag (e.g. </think> or <|end_of_thought|>)
+    const closingTagRegex =
+      /(?:<\/think>|<\/thought>|<\/reasoning>|<\/thinking>|<\|endofthought\|>|<\|end_of_thought\|>|<\|im_end\|>|\[\/thought\]|\[\/think\]|\[\/reasoning\]|\|\/thought\||\|endofthought\||```\/thought)([\s\S]*)/i;
+    const closingMatch = text.match(closingTagRegex);
+    if (
+      closingMatch &&
+      closingMatch[1] !== undefined &&
+      closingMatch.index !== undefined
+    ) {
+      const reasoning = text.slice(0, closingMatch.index).trim();
+      const answer = closingMatch[1].trim();
+      if (answer) {
+        return { reasoning, answer };
+      }
+    }
+
+    // 3. Delimiter patterns like "Final Answer:", "Answer:", "### Response", "---", etc.
+    const delimiterRegexes = [
+      /(?:\n|^)(?:---|\*\*\*)\s*\n+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)(?:Output|Result|Explanation)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
+    ];
+
+    for (const regex of delimiterRegexes) {
+      const match = text.match(regex);
+      if (match && match.index !== undefined && match[1]?.trim()) {
+        const reasoning = text.slice(0, match.index).trim();
+        const answer = match[1].trim();
+        if (reasoning.length > 10) {
+          return { reasoning, answer };
+        }
+      }
+    }
+
+    return { reasoning: "", answer: text };
+  }
+
+  /**
    * Streams chat completion from LM Studio.
    * Supports both delta.reasoning_content (OpenAI / DeepSeek / LM Studio native)
    * and in-stream <think>...</think> tags for standard llama / oss reasoning models.
@@ -79,6 +152,8 @@ export class LMStudioClient {
 
     if (params.maxTokens && params.maxTokens > 0) {
       bodyPayload.max_tokens = params.maxTokens;
+      // Also send max_completion_tokens for OpenAI reasoning / gpt-oss models
+      bodyPayload.max_completion_tokens = params.maxTokens;
     }
 
     // Prepared for future tool calling
@@ -117,25 +192,227 @@ export class LMStudioClient {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+    let streamBuffer = "";
 
     let fullContent = "";
     let fullReasoning = "";
     let accumulatedToolCalls: any[] = [];
 
-    // State for parsing <think>...</think> tags inside content stream
+    // State machine for in-stream reasoning tags (case-insensitive)
+    const START_TAGS = [
+      "<think>",
+      "<thought>",
+      "<reasoning>",
+      "<thinking>",
+      "<|thought|>",
+      "<|start_of_thought|>",
+      "[thought]",
+      "[think]",
+      "[reasoning]",
+      "|thought|",
+      "```thought",
+      "```think",
+    ];
+
+    const END_TAGS = [
+      "</think>",
+      "</thought>",
+      "</reasoning>",
+      "</thinking>",
+      "<|endofthought|>",
+      "<|end_of_thought|>",
+      "<|im_end|>",
+      "<|end|>",
+      "<|eot_id|>",
+      "[/thought]",
+      "[/think]",
+      "[/reasoning]",
+      "|/thought|",
+      "|endofthought|",
+      "```/thought",
+      "```end_of_thought",
+      "\n\nfinal answer:",
+      "\n\n**final answer:**",
+      "\n\n### final answer",
+      "\n\nanswer:",
+      "\n\n**answer:**",
+      "\n\n### answer",
+    ];
+
     let inThinkBlock = false;
-    let tagBuffer = "";
+    let pendingContent = "";
+
+    const processContentBuffer = (forceFlush = false) => {
+      while (pendingContent.length > 0) {
+        const lowerPending = pendingContent.toLowerCase();
+
+        if (!inThinkBlock) {
+          // Find earliest start tag
+          let earliestIdx = -1;
+          let matchedTagLen = 0;
+
+          for (const tag of START_TAGS) {
+            const idx = lowerPending.indexOf(tag);
+            if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
+              earliestIdx = idx;
+              matchedTagLen = tag.length;
+            }
+          }
+
+          if (earliestIdx !== -1) {
+            const before = pendingContent.slice(0, earliestIdx);
+            if (before) {
+              fullContent += before;
+              params.onToken(before, "");
+            }
+            inThinkBlock = true;
+            pendingContent = pendingContent.slice(earliestIdx + matchedTagLen);
+          } else {
+            if (forceFlush) {
+              fullContent += pendingContent;
+              params.onToken(pendingContent, "");
+              pendingContent = "";
+              break;
+            }
+
+            // Check if ends with partial prefix of any start tag
+            let longestPrefixLen = 0;
+            for (const tag of START_TAGS) {
+              for (
+                let len = Math.min(tag.length - 1, pendingContent.length);
+                len >= 1;
+                len--
+              ) {
+                if (lowerPending.endsWith(tag.slice(0, len))) {
+                  if (len > longestPrefixLen) {
+                    longestPrefixLen = len;
+                  }
+                }
+              }
+            }
+
+            if (longestPrefixLen > 0) {
+              const safeText = pendingContent.slice(
+                0,
+                pendingContent.length - longestPrefixLen,
+              );
+              if (safeText) {
+                fullContent += safeText;
+                params.onToken(safeText, "");
+              }
+              pendingContent = pendingContent.slice(
+                pendingContent.length - longestPrefixLen,
+              );
+              break;
+            } else {
+              fullContent += pendingContent;
+              params.onToken(pendingContent, "");
+              pendingContent = "";
+              break;
+            }
+          }
+        } else {
+          // Currently inside think block - find earliest end tag
+          let earliestIdx = -1;
+          let matchedTagLen = 0;
+          let isAnswerSeparator = false;
+
+          for (const tag of END_TAGS) {
+            const idx = lowerPending.indexOf(tag);
+            if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
+              earliestIdx = idx;
+              matchedTagLen = tag.length;
+              if (tag.includes("answer")) {
+                isAnswerSeparator = true;
+              }
+            }
+          }
+
+          if (earliestIdx !== -1) {
+            const before = pendingContent.slice(0, earliestIdx);
+            if (before) {
+              fullReasoning += before;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(before);
+              }
+              params.onToken("", before);
+            }
+            inThinkBlock = false;
+            // If the matched tag was an answer header like "\n\nFinal Answer:", preserve it in content
+            if (isAnswerSeparator) {
+              pendingContent = pendingContent.slice(earliestIdx);
+            } else {
+              pendingContent = pendingContent.slice(
+                earliestIdx + matchedTagLen,
+              );
+            }
+          } else {
+            if (forceFlush) {
+              // At stream end, if we're still in think block, check if there's an answer within pendingContent
+              fullReasoning += pendingContent;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(pendingContent);
+              }
+              params.onToken("", pendingContent);
+              pendingContent = "";
+              break;
+            }
+
+            // Check if ends with partial prefix of any end tag
+            let longestPrefixLen = 0;
+            for (const tag of END_TAGS) {
+              for (
+                let len = Math.min(tag.length - 1, pendingContent.length);
+                len >= 1;
+                len--
+              ) {
+                if (lowerPending.endsWith(tag.slice(0, len))) {
+                  if (len > longestPrefixLen) {
+                    longestPrefixLen = len;
+                  }
+                }
+              }
+            }
+
+            if (longestPrefixLen > 0) {
+              const safeText = pendingContent.slice(
+                0,
+                pendingContent.length - longestPrefixLen,
+              );
+              if (safeText) {
+                fullReasoning += safeText;
+                if (params.onReasoningToken) {
+                  params.onReasoningToken(safeText);
+                }
+                params.onToken("", safeText);
+              }
+              pendingContent = pendingContent.slice(
+                pendingContent.length - longestPrefixLen,
+              );
+              break;
+            } else {
+              fullReasoning += pendingContent;
+              if (params.onReasoningToken) {
+                params.onReasoningToken(pendingContent);
+              }
+              params.onToken("", pendingContent);
+              pendingContent = "";
+              break;
+            }
+          }
+        }
+      }
+    };
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split("\n");
         // Keep the last partial line in the buffer
-        buffer = lines.pop() ?? "";
+        streamBuffer = lines.pop() ?? "";
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -153,12 +430,18 @@ export class LMStudioClient {
               const choice = parsed.choices?.[0];
               if (!choice) continue;
 
-              const delta = choice.delta;
-              if (!delta) continue;
+              const delta = choice.delta || {};
 
-              // 1. Native reasoning delta (LM Studio, DeepSeek-R1, OpenAI-style)
-              const reasoningDelta = delta.reasoning_content || delta.reasoning;
-              if (reasoningDelta) {
+              // 1. Native reasoning delta (LM Studio, DeepSeek-R1, OpenAI-style, GPT-OSS)
+              const reasoningDelta =
+                delta.reasoning_content ??
+                delta.reasoning ??
+                delta.thought ??
+                delta.thinking ??
+                choice.message?.reasoning_content ??
+                choice.message?.reasoning;
+
+              if (reasoningDelta && typeof reasoningDelta === "string") {
                 fullReasoning += reasoningDelta;
                 if (params.onReasoningToken) {
                   params.onReasoningToken(reasoningDelta);
@@ -174,78 +457,38 @@ export class LMStudioClient {
                 }
               }
 
-              // 3. Regular content delta (may contain <think> tags for llama-style models)
-              const contentDelta = delta.content;
-              if (contentDelta) {
-                let currentText = contentDelta;
+              // 3. Regular content delta (may contain <think> tags or standard output)
+              const rawContent =
+                delta.content ??
+                choice.message?.content ??
+                (typeof choice.text === "string" ? choice.text : null);
 
-                // Process potential <think> or </think> tags within the stream
-                while (currentText.length > 0) {
-                  if (!inThinkBlock) {
-                    const thinkStartIdx = currentText.indexOf("<think>");
-                    if (thinkStartIdx !== -1) {
-                      // Text before <think>
-                      const before = currentText.slice(0, thinkStartIdx);
-                      if (before) {
-                        fullContent += before;
-                        params.onToken(before, "");
-                      }
-                      inThinkBlock = true;
-                      currentText = currentText.slice(thinkStartIdx + 7);
-                    } else {
-                      // Check for partial tag '<think' at the end
-                      if (
-                        currentText.endsWith("<") ||
-                        currentText.endsWith("<t") ||
-                        currentText.endsWith("<th") ||
-                        currentText.endsWith("<thi") ||
-                        currentText.endsWith("<thin") ||
-                        currentText.endsWith("<think")
-                      ) {
-                        // Safe chunk to send
-                        const lastLt = currentText.lastIndexOf("<");
-                        const safePart = currentText.slice(0, lastLt);
-                        tagBuffer = currentText.slice(lastLt);
-                        if (safePart) {
-                          fullContent += safePart;
-                          params.onToken(safePart, "");
-                        }
-                        currentText = "";
-                      } else {
-                        fullContent += currentText;
-                        params.onToken(currentText, "");
-                        currentText = "";
-                      }
-                    }
-                  } else {
-                    // Currently inside <think>...</think>
-                    const thinkEndIdx = currentText.indexOf("</think>");
-                    if (thinkEndIdx !== -1) {
-                      const thinkContent = currentText.slice(0, thinkEndIdx);
-                      if (thinkContent) {
-                        fullReasoning += thinkContent;
-                        if (params.onReasoningToken) {
-                          params.onReasoningToken(thinkContent);
-                        }
-                        params.onToken("", thinkContent);
-                      }
-                      inThinkBlock = false;
-                      currentText = currentText.slice(thinkEndIdx + 8);
-                    } else {
-                      fullReasoning += currentText;
-                      if (params.onReasoningToken) {
-                        params.onReasoningToken(currentText);
-                      }
-                      params.onToken("", currentText);
-                      currentText = "";
-                    }
-                  }
-                }
+              if (rawContent && typeof rawContent === "string") {
+                pendingContent += rawContent;
+                processContentBuffer(false);
               }
             } catch (parseErr) {
               // Ignore individual malformed chunks
             }
           }
+        }
+      }
+
+      // Flush any remaining content in tag buffer at end of stream
+      processContentBuffer(true);
+
+      // Post-process fallback: Ensure reasoning models cleanly separate reasoning from final output
+      if (!fullContent.trim() && fullReasoning.trim()) {
+        const split = LMStudioClient.splitReasoningAndAnswer(fullReasoning);
+        if (split.answer && split.answer !== fullReasoning) {
+          fullContent = split.answer;
+          fullReasoning = split.reasoning;
+        }
+      } else if (fullContent.trim() && !fullReasoning.trim()) {
+        const split = LMStudioClient.splitReasoningAndAnswer(fullContent);
+        if (split.reasoning && split.answer) {
+          fullContent = split.answer;
+          fullReasoning = split.reasoning;
         }
       }
     } finally {

@@ -11,15 +11,15 @@ import {
   ChatMessage,
   Conversation,
   ChatContextItem,
-  ILMStudioPlugin,
+  IAidePlugin,
 } from "../types";
 import { LMStudioClient } from "../api/lmStudioClient";
 import { ChatHistoryModal } from "./HistoryModal";
 
-export const LM_STUDIO_VIEW_TYPE = "lm-studio-copilot-view";
+export const AIDE_VIEW_TYPE = "aide-chat-view";
 
-export class LMStudioChatView extends ItemView {
-  plugin: ILMStudioPlugin;
+export class AideChatView extends ItemView {
+  plugin: IAidePlugin;
 
   // UI Elements
   private headerEl!: HTMLElement;
@@ -39,18 +39,18 @@ export class LMStudioChatView extends ItemView {
   private activeContext: ChatContextItem | null = null;
   private isContextManuallyRemoved: boolean = false;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ILMStudioPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: IAidePlugin) {
     super(leaf);
     this.plugin = plugin;
     this.currentConversation = this.createNewConversation();
   }
 
   getViewType(): string {
-    return LM_STUDIO_VIEW_TYPE;
+    return AIDE_VIEW_TYPE;
   }
 
   getDisplayText(): string {
-    return "LM Studio Personal";
+    return "Aide";
   }
 
   getIcon(): string {
@@ -167,7 +167,7 @@ export class LMStudioChatView extends ItemView {
     this.inputEl = inputWrapper.createEl("textarea", {
       cls: "lm-copilot-textarea",
       attr: {
-        placeholder: "Ask Copilot... (Shift+Enter for newline)",
+        placeholder: "Ask Aide... (Shift+Enter for newline)",
         rows: "1",
       },
     });
@@ -401,7 +401,7 @@ export class LMStudioChatView extends ItemView {
       });
       const iconEl = emptyStateEl.createDiv({ cls: "lm-copilot-empty-icon" });
       setIcon(iconEl, "sparkles");
-      emptyStateEl.createEl("h3", { text: "LM Studio Personal" });
+      emptyStateEl.createEl("h3", { text: "Aide" });
       emptyStateEl.createEl("p", {
         text: "Ask questions, brainstorm ideas, analyze notes, or write content with your local LLMs.",
       });
@@ -415,6 +415,79 @@ export class LMStudioChatView extends ItemView {
     this.scrollToBottom();
   }
 
+  private getOrCreateReasoningElements(msgEl: HTMLElement): {
+    container: HTMLElement;
+    details: HTMLDetailsElement;
+    summary: HTMLElement;
+    summaryTitle: HTMLElement;
+    body: HTMLElement;
+  } {
+    let container = msgEl.querySelector(
+      ".lm-copilot-reasoning-container",
+    ) as HTMLElement;
+    if (!container) {
+      container = msgEl.createDiv({
+        cls: "lm-copilot-reasoning-container",
+      });
+      const headerEl = msgEl.querySelector(".lm-copilot-message-header");
+      if (
+        headerEl &&
+        headerEl.nextSibling &&
+        headerEl.nextSibling !== container
+      ) {
+        msgEl.insertBefore(container, headerEl.nextSibling);
+      }
+    }
+
+    if (!this.plugin.settings.showReasoning && !this.isGenerating) {
+      container.addClass("is-hidden");
+    } else {
+      container.removeClass("is-hidden");
+    }
+
+    let details = container.querySelector(
+      ".lm-copilot-reasoning-details",
+    ) as HTMLDetailsElement;
+    if (!details) {
+      details = container.createEl("details", {
+        cls: "lm-copilot-reasoning-details",
+      });
+    }
+
+    let summary = details.querySelector(
+      ".lm-copilot-reasoning-summary",
+    ) as HTMLElement;
+    let summaryTitle: HTMLElement;
+    if (!summary) {
+      summary = details.createEl("summary", {
+        cls: "lm-copilot-reasoning-summary",
+      });
+      const brainIcon = summary.createSpan({
+        cls: "lm-copilot-reasoning-icon",
+      });
+      setIcon(brainIcon, "cpu");
+      summaryTitle = summary.createSpan({
+        cls: "lm-copilot-reasoning-title",
+        text: "Thinking Process",
+      });
+    } else {
+      summaryTitle = summary.querySelector(
+        ".lm-copilot-reasoning-title",
+      ) as HTMLElement;
+    }
+
+    let body = details.querySelector(
+      ".lm-copilot-reasoning-body",
+    ) as HTMLElement;
+    if (!body) {
+      body = details.createDiv({
+        cls: "lm-copilot-reasoning-body",
+      });
+    }
+
+    return { container, details, summary, summaryTitle, body };
+  }
+
   private renderMessageElement(msg: ChatMessage): HTMLElement {
     const msgEl = this.messagesContainerEl.createDiv({
       cls: `lm-copilot-message lm-copilot-message-${msg.role}`,
@@ -423,7 +496,7 @@ export class LMStudioChatView extends ItemView {
 
     // Header / badge
     const headerEl = msgEl.createDiv({ cls: "lm-copilot-message-header" });
-    const roleName = msg.role === "user" ? "You" : "Copilot";
+    const roleName = msg.role === "user" ? "You" : "Aide";
     headerEl.createSpan({ cls: "lm-copilot-message-author", text: roleName });
 
     // Context badge on user message if applicable
@@ -437,41 +510,12 @@ export class LMStudioChatView extends ItemView {
     }
 
     // Reasoning / Thinking block for Assistant
-    if (
-      msg.role === "assistant" &&
-      (msg.reasoningContent || this.isGenerating)
-    ) {
-      const reasoningContainer = msgEl.createDiv({
-        cls: "lm-copilot-reasoning-container",
-      });
-      if (!this.plugin.settings.showReasoning && !this.isGenerating) {
-        reasoningContainer.addClass("is-hidden");
+    if (msg.role === "assistant" && msg.reasoningContent) {
+      const reasoningElements = this.getOrCreateReasoningElements(msgEl);
+      reasoningElements.body.setText(msg.reasoningContent);
+      if (!msg.content) {
+        reasoningElements.details.open = true;
       }
-
-      const detailsEl = reasoningContainer.createEl("details", {
-        cls: "lm-copilot-reasoning-details",
-      });
-      // Open reasoning block by default during active thinking
-      if (this.isGenerating && !msg.content) {
-        detailsEl.open = true;
-      }
-
-      const summaryEl = detailsEl.createEl("summary", {
-        cls: "lm-copilot-reasoning-summary",
-      });
-      const brainIcon = summaryEl.createSpan({
-        cls: "lm-copilot-reasoning-icon",
-      });
-      setIcon(brainIcon, "cpu");
-      summaryEl.createSpan({
-        cls: "lm-copilot-reasoning-title",
-        text: "Thinking Process",
-      });
-
-      const reasoningBodyEl = detailsEl.createDiv({
-        cls: "lm-copilot-reasoning-body",
-        text: msg.reasoningContent || "",
-      });
     }
 
     // Message content markdown body
@@ -486,6 +530,11 @@ export class LMStudioChatView extends ItemView {
         this.activeContext?.path || "",
         this,
       );
+    } else if (msg.role === "assistant" && msg.reasoningContent) {
+      bodyEl.createEl("p", {
+        cls: "lm-copilot-reasoning-only-note",
+        text: "(Model completed with reasoning output above)",
+      });
     }
 
     // Action bar (Copy, etc.)
@@ -497,7 +546,8 @@ export class LMStudioChatView extends ItemView {
     });
     setIcon(copyBtn, "copy");
     copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(msg.content);
+      const textToCopy = msg.content || msg.reasoningContent || "";
+      await navigator.clipboard.writeText(textToCopy);
       new Notice("Copied message to clipboard!");
       setIcon(copyBtn, "check");
       setTimeout(() => setIcon(copyBtn, "copy"), 1500);
@@ -593,12 +643,16 @@ export class LMStudioChatView extends ItemView {
       } else if (m.role === "assistant") {
         apiMessages.push({
           role: "assistant",
-          content: m.content,
+          content: m.content || m.reasoningContent || "",
         });
       }
     }
 
     // 3. Prepare Assistant Message Placeholder in UI
+    this.isGenerating = true;
+    this.setGeneratingUI(true);
+    this.currentAbortController = new AbortController();
+
     const assistantMsg: ChatMessage = {
       id: "msg_" + Date.now() + "_a",
       role: "assistant",
@@ -609,15 +663,6 @@ export class LMStudioChatView extends ItemView {
 
     this.currentConversation.messages.push(assistantMsg);
     const assistantMsgEl = this.renderMessageElement(assistantMsg);
-    const reasoningContainer = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-container",
-    ) as HTMLElement;
-    const reasoningDetails = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-details",
-    ) as HTMLDetailsElement;
-    const reasoningBody = assistantMsgEl.querySelector(
-      ".lm-copilot-reasoning-body",
-    ) as HTMLElement;
     const bodyEl = assistantMsgEl.querySelector(
       ".lm-copilot-message-body",
     ) as HTMLElement;
@@ -625,16 +670,12 @@ export class LMStudioChatView extends ItemView {
     this.scrollToBottom();
 
     // 4. Start Streaming Request
-    this.isGenerating = true;
-    this.setGeneratingUI(true);
-    this.currentAbortController = new AbortController();
-
     let accumulatedContent = "";
     let accumulatedReasoning = "";
     let lastRenderTime = 0;
 
     try {
-      this.statusEl.setText("Generating response...");
+      this.statusEl.setText("Connecting to model...");
 
       const result = await LMStudioClient.streamChat({
         baseUrl: this.plugin.settings.baseUrl,
@@ -646,16 +687,33 @@ export class LMStudioChatView extends ItemView {
         onToken: (contentChunk, reasoningChunk) => {
           if (reasoningChunk) {
             accumulatedReasoning += reasoningChunk;
-            if (reasoningBody) {
-              reasoningBody.setText(accumulatedReasoning);
+            const elements = this.getOrCreateReasoningElements(assistantMsgEl);
+            elements.body.setText(accumulatedReasoning);
+            if (!elements.details.open) {
+              elements.details.open = true;
             }
-            if (reasoningDetails && !reasoningDetails.open) {
-              reasoningDetails.open = true;
+            if (!accumulatedContent) {
+              this.statusEl.setText("Thinking...");
+              elements.summaryTitle.setText("Thinking...");
             }
+            this.scrollToBottom();
           }
 
           if (contentChunk) {
             accumulatedContent += contentChunk;
+            this.statusEl.setText("Generating response...");
+            const reasoningElements = assistantMsgEl.querySelector(
+              ".lm-copilot-reasoning-container",
+            );
+            if (reasoningElements) {
+              const summaryTitle = reasoningElements.querySelector(
+                ".lm-copilot-reasoning-title",
+              );
+              if (summaryTitle) {
+                summaryTitle.setText("Thinking Process");
+              }
+            }
+
             // Throttle markdown rendering during stream for responsiveness
             const now = Date.now();
             if (now - lastRenderTime > 80) {
@@ -674,23 +732,67 @@ export class LMStudioChatView extends ItemView {
         },
       });
 
-      assistantMsg.content = result.fullContent || accumulatedContent;
-      assistantMsg.reasoningContent =
-        result.fullReasoning || accumulatedReasoning;
+      assistantMsg.content = (result.fullContent || accumulatedContent).trim();
+      assistantMsg.reasoningContent = (
+        result.fullReasoning || accumulatedReasoning
+      ).trim();
 
-      // Final clean Markdown render
+      // Ensure reasoning and answer are properly parsed and separated
+      if (assistantMsg.reasoningContent && !assistantMsg.content) {
+        const split = LMStudioClient.splitReasoningAndAnswer(
+          assistantMsg.reasoningContent,
+        );
+        if (split.answer && split.reasoning) {
+          assistantMsg.content = split.answer;
+          assistantMsg.reasoningContent = split.reasoning;
+        }
+      } else if (assistantMsg.content && !assistantMsg.reasoningContent) {
+        const split = LMStudioClient.splitReasoningAndAnswer(
+          assistantMsg.content,
+        );
+        if (split.reasoning && split.answer) {
+          assistantMsg.content = split.answer;
+          assistantMsg.reasoningContent = split.reasoning;
+        }
+      }
+
+      // Always maintain reasoning block in DOM if reasoningContent is present
+      const reasoningEl = assistantMsgEl.querySelector(
+        ".lm-copilot-reasoning-container",
+      ) as HTMLElement;
+
+      if (assistantMsg.reasoningContent) {
+        const elements = this.getOrCreateReasoningElements(assistantMsgEl);
+        elements.body.setText(assistantMsg.reasoningContent);
+        elements.summaryTitle.setText("Thinking Process");
+
+        // Collapse accordion when final answer is available, or leave open if only reasoning
+        elements.details.open = !assistantMsg.content;
+
+        if (!this.plugin.settings.showReasoning) {
+          elements.container.addClass("is-hidden");
+        } else {
+          elements.container.removeClass("is-hidden");
+        }
+      } else if (reasoningEl) {
+        reasoningEl.addClass("is-hidden");
+      }
+
+      // Render final body markdown
       bodyEl.empty();
-      await MarkdownRenderer.render(
-        this.app,
-        assistantMsg.content,
-        bodyEl,
-        this.activeContext?.path || "",
-        this,
-      );
-
-      // Collapse reasoning details after completion if there is content
-      if (reasoningDetails && assistantMsg.content) {
-        reasoningDetails.open = false;
+      if (!assistantMsg.content && assistantMsg.reasoningContent) {
+        bodyEl.createEl("p", {
+          cls: "lm-copilot-reasoning-only-note",
+          text: "💡 Model finished thinking but produced no separate final response. (If generation was cut short, try increasing 'Max Output Tokens' in Settings).",
+        });
+      } else {
+        await MarkdownRenderer.render(
+          this.app,
+          assistantMsg.content,
+          bodyEl,
+          this.activeContext?.path || "",
+          this,
+        );
       }
     } catch (err: any) {
       if (
@@ -700,7 +802,7 @@ export class LMStudioChatView extends ItemView {
         assistantMsg.content =
           accumulatedContent + "\n\n*[Generation stopped by user]*";
       } else {
-        console.error("[LM Studio Copilot] Stream error:", err);
+        console.error("[Aide] Stream error:", err);
         assistantMsg.content =
           accumulatedContent +
           `\n\n> ⚠️ **Error:** ${err.message || "Failed to communicate with LM Studio."}`;
