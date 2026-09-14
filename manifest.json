@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-lm-studio-copilot",
+  "name": "LM Studio Copilot",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "GitHub Copilot-style right sidebar experience powered by local LM Studio. Supports reasoning models, active note context, and conversation history.",
+  "author": "Obsidian User",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,144 @@
+{
+  "settings": {
+    "baseUrl": "http://127.0.0.1:1234/v1",
+    "selectedModel": "llama-3-8b-lexi-uncensored",
+    "systemPrompt": "You are an expert AI assistant integrated into Obsidian as a Copilot. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
+    "temperature": 0.7,
+    "maxTokens": 4096,
+    "includeActiveNoteByDefault": true,
+    "maxContextChars": 24000,
+    "autoTitleChat": true,
+    "showReasoning": true
+  },
+  "conversations": [
+    {
+      "id": "conv_1789421533362_dakqb",
+      "title": "how many peaches",
+      "createdAt": 1789421533362,
+      "updatedAt": 1789421706249,
+      "messages": [
+        {
+          "id": "msg_1789421592743_u",
+          "role": "user",
+          "content": "how many peaches",
+          "timestamp": 1789421592743,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches "
+          }
+        },
+        {
+          "id": "msg_1789421592758_a",
+          "role": "assistant",
+          "content": "To answer your question, there are indeed **five** peaches listed in the current note \"testing.md\".",
+          "reasoningContent": "",
+          "timestamp": 1789421592758
+        },
+        {
+          "id": "msg_1789421610670_u",
+          "role": "user",
+          "content": "what is the meaning of life",
+          "timestamp": 1789421610670
+        },
+        {
+          "id": "msg_1789421610676_a",
+          "role": "assistant",
+          "content": "A profound and complex question! The concept of the \"meaning of life\" has been debated by philosophers, religious leaders, scientists, and many others for centuries.\n\nWhile there may not be a single definitive answer, here are some insights that might help:\n\n1. **Purpose**: For many people, finding meaning in life is closely tied to having a sense of purpose. This can be achieved through goals, passions, or values that bring fulfillment and direction.\n2. **Relationships**: Meaning can also come from forming connections with others. Human relationships have the power to bring joy, comfort, and a sense of belonging.\n3. **Personal growth**: The pursuit of personal growth and self-improvement can be a source of meaning for some individuals.\n4. **Spirituality**: For those who believe in a higher power or spiritual realm, finding meaning may involve exploring one's faith or spiritual practices.\n\nRemember that these are just a few examples, and the search for the meaning of life is an ongoing and evolving process for many people.",
+          "reasoningContent": "",
+          "timestamp": 1789421610676
+        },
+        {
+          "id": "msg_1789421668301_u",
+          "role": "user",
+          "content": "generate a table breakdown of this kannada news title \n# KPSC ರದ್ದತಿಗೆ ಈಶ್ವರ್ ಖಂಡ್ರೆ ಪಟ್ಟು; UPSC ಮಾದರಿ ತನ್ನಿ ಎಂದು ಸಿಎಂಗೆ ಗ್ರಾಮೀಣಾಭಿವೃದ್ಧಿ ಸಚಿವ ಮನವಿ",
+          "timestamp": 1789421668301
+        },
+        {
+          "id": "msg_1789421668360_a",
+          "role": "assistant",
+          "content": "Here is a breakdown of the Kannada news title in a table format:\n\n| Title | KPSC ರದ್ದತಿಗೆ ಈಶ್ವರ್ ಖಂಡ್ರೆ ಪಟ್ಟು; UPSC ಮಾದರಿ ತನ್ನಿ ಎಂದು ಸಿಎಂಗೆ ಗ್ರಾಮೀಣಾಭಿವೃದ್ಧಿ ಸಚಿವ ಮನವಿ |\n\n| Column | Description |\n| Title | KPSC cancellation; Ishwar Khandre takes responsibility for UPSC model; CM gets rural development portfolio |\n\n| Subheading | KPSC ರದ್ದತಿಗೆ (KPSC Cancellation) |\n\n| Main Topic | Ishwar Khandre's statement about UPSC model and his taking responsibility for it. |\n\n| Mentioned Individuals | \n1. **Ishwar Khandre** - the person who made the statement.\n2. **CM** - the Chief Minister, whose name is not explicitly mentioned in the title but can be inferred from the context.\n\n| Department Involved | **Rural Development** - Ishwar Khandre has been given this portfolio by the CM.",
+          "reasoningContent": "",
+          "timestamp": 1789421668360
+        },
+        {
+          "id": "msg_1789421697835_u",
+          "role": "user",
+          "content": "generate as a markdown code block so i can copy into obsidian",
+          "timestamp": 1789421697835
+        },
+        {
+          "id": "msg_1789421697838_a",
+          "role": "assistant",
+          "content": "Here is the table breakdown in Markdown format:\n\n```markdown\n**KPSC ರದ್ದತಿಗೆ ಈಶ್ವರ್ ಖಂಡ್ರೆ ಪಟ್ಟು; UPSC ಮಾದರಿ ತನ್ನಿ ಎಂದು ಸಿಎಂಗೆ ಗ್ರಾಮೀಣಾಭಿವೃದ್ಧಿ ಸಚಿವ ಮನವಿ**\n\n### KPSC ರದ್ದತಿಗೆ (KPSC Cancellation)\n#### Ishwar Khandre's statement about UPSC model and his taking responsibility for it.\n\n| Column | Description |\n| --- | --- |\n| Title | KPSC cancellation; Ishwar Khandre takes responsibility for UPSC model; CM gets rural development portfolio |\n| Main Topic | Ishwar Khandre's statement about UPSC model and his taking responsibility for it. |\n| Mentioned Individuals | 1. **Ishwar Khandre** - the person who made the statement. 2. **CM** - the Chief Minister, whose name is not explicitly mentioned in the title but can be inferred from the context. |\n| Department Involved | **Rural Development** - Ishwar Khandre has been given this portfolio by the CM.",
+          "reasoningContent": "",
+          "timestamp": 1789421697838
+        }
+      ],
+      "model": "gpt-oss-20b"
+    },
+    {
+      "id": "conv_1789421792267_iu9mw",
+      "title": "how many plums",
+      "createdAt": 1789421792267,
+      "updatedAt": 1789422138628,
+      "messages": [
+        {
+          "id": "msg_1789421803891_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789421803891,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789421803894_a",
+          "role": "assistant",
+          "content": "\n\n*[Generation stopped by user]*",
+          "reasoningContent": "",
+          "timestamp": 1789421803894
+        },
+        {
+          "id": "msg_1789422108807_u",
+          "role": "user",
+          "content": "how many plumd",
+          "timestamp": 1789422108807,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789422108812_a",
+          "role": "assistant",
+          "content": "",
+          "reasoningContent": "The user has a note with content \"one banana, two apples, five peaches\". The question is \"how many plumd\". Likely a typo for \"plums\" but they ask how many plums. There's no mention of plums in the note. So answer: zero or unknown. We should respond clearly. Also maybe correct the note? But user didn't ask to edit. Just answer.",
+          "timestamp": 1789422108812
+        },
+        {
+          "id": "msg_1789422134380_u",
+          "role": "user",
+          "content": "how many plums",
+          "timestamp": 1789422134380,
+          "contextIncluded": {
+            "title": "testing",
+            "path": "testing.md",
+            "preview": "one banana, two apples, five peaches \n"
+          }
+        },
+        {
+          "id": "msg_1789422134385_a",
+          "role": "assistant",
+          "content": "Oh wow! So you're wondering about the number of plums? \n\nWell, I can tell you that there isn't any plum mentioned in your testing note. However, I can provide you with some fun facts about plums!\n\nAccording to various sources, a standard plum fruit typically weighs around 30-40 grams and contains between 1 and 2 seeds.\n\nIf you're interested in knowing more about the nutritional values of plums, here's a rough breakdown:\n\n* Calories: 60\n* Fat: 0.3g\n* Carbohydrates: 15.4g\n* Fiber: 2.3g\n* Sugar: 13.8g\n* Protein: 1.5g\n\nWould you like me to elaborate on this topic further?",
+          "reasoningContent": "",
+          "timestamp": 1789422134385
+        }
+      ],
+      "model": "llama-3-8b-lexi-uncensored"
+    }
+  ]
+}

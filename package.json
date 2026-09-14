@@ -1,0 +1,28 @@
+{
+  "name": "obsidian-lm-studio-copilot",
+  "version": "1.0.0",
+  "description": "GitHub Copilot-like right sidebar AI assistant powered by local LM Studio server",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "lm-studio",
+    "copilot",
+    "local-ai",
+    "reasoning"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.3"
+  }
+}
