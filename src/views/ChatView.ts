@@ -2,7 +2,6 @@ import {
   ItemView,
   WorkspaceLeaf,
   MarkdownRenderer,
-  Menu,
   setIcon,
   Notice,
   TFile,
@@ -16,6 +15,7 @@ import {
 } from "../types";
 import { LMStudioClient } from "../api/lmStudioClient";
 import { ChatHistoryModal } from "./HistoryModal";
+import { CannedPromptPickerPopover } from "./CannedPromptsModal";
 
 export const AIDE_VIEW_TYPE = "aide-chat-view";
 
@@ -40,6 +40,7 @@ export class AideChatView extends ItemView {
   private currentAbortController: AbortController | null = null;
   private activeContext: ChatContextItem | null = null;
   private isContextManuallyRemoved: boolean = false;
+  private cannedPromptsPopover: CannedPromptPickerPopover | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: IAidePlugin) {
     super(leaf);
@@ -90,6 +91,7 @@ export class AideChatView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.cannedPromptsPopover?.close();
     this.stopGeneration();
   }
 
@@ -186,7 +188,7 @@ export class AideChatView extends ItemView {
     this.inputEl = inputWrapper.createEl("textarea", {
       cls: "lm-copilot-textarea",
       attr: {
-        placeholder: "Ask Aide... (Shift+Enter for newline)",
+        placeholder: "Ask Aide...",
         rows: "1",
       },
     });
@@ -236,23 +238,23 @@ export class AideChatView extends ItemView {
 
   public updateCannedPromptsDropdown(): void {
     if (!this.cannedPromptsBtnEl) return;
-    this.cannedPromptsBtnEl.disabled = this.plugin.cannedPrompts.length === 0;
+    this.cannedPromptsBtnEl.disabled = false;
   }
 
   private showCannedPromptsMenu(event: MouseEvent): void {
-    const menu = new Menu();
-    for (const prompt of this.plugin.cannedPrompts) {
-      menu.addItem((item) => {
-        item.setTitle(prompt.title);
-        item.setIcon("list-plus");
-        item.onClick(() => {
-          this.inputEl.value = prompt.content;
-          this.inputEl.dispatchEvent(new Event("input"));
-          this.inputEl.focus();
-        });
-      });
-    }
-    menu.showAtMouseEvent(event);
+    event.preventDefault();
+    this.cannedPromptsPopover?.close();
+    this.cannedPromptsPopover = new CannedPromptPickerPopover(
+      this.app,
+      this.plugin,
+      (prompt) => {
+        this.inputEl.value = prompt.content;
+        this.inputEl.dispatchEvent(new Event("input"));
+        this.inputEl.focus();
+      },
+      this.cannedPromptsBtnEl,
+    );
+    this.cannedPromptsPopover.open();
   }
 
   // -------------------------------------------------------------
@@ -615,6 +617,42 @@ export class AideChatView extends ItemView {
 
     // Action bar (Copy, etc.)
     const actionsEl = msgEl.createDiv({ cls: "lm-copilot-message-actions" });
+
+    const insertBtn = actionsEl.createEl("button", {
+      cls: "clickable-icon lm-copilot-icon-btn",
+      attr: { "aria-label": "Insert at cursor" },
+    });
+    setIcon(insertBtn, "file-input");
+    insertBtn.onclick = async () => {
+      const textToInsert = msg.content || msg.reasoningContent || "";
+      if (!textToInsert) {
+        new Notice("There is no message text to insert.");
+        return;
+      }
+
+      const markdownView = this.plugin.getContextMarkdownView();
+      const file = markdownView?.file;
+      if (!file) {
+        new Notice("Open a Markdown note before inserting a message.");
+        return;
+      }
+
+      if (markdownView.editor) {
+        markdownView.editor.replaceRange(
+          textToInsert,
+          markdownView.editor.getCursor(),
+        );
+      } else {
+        const existingContent = await this.app.vault.cachedRead(file);
+        const separator =
+          existingContent.endsWith("\n") || !existingContent ? "" : "\n";
+        await this.app.vault.append(file, `${separator}${textToInsert}`);
+      }
+
+      new Notice("Inserted message into note.");
+      setIcon(insertBtn, "check");
+      setTimeout(() => setIcon(insertBtn, "file-input"), 1500);
+    };
 
     const copyBtn = actionsEl.createEl("button", {
       cls: "clickable-icon lm-copilot-icon-btn",

@@ -13,6 +13,10 @@ export class CannedPromptsModal extends Modal {
     this.render();
   }
 
+  public openNewPrompt(): void {
+    this.openEditor();
+  }
+
   private render(): void {
     const { contentEl } = this;
     contentEl.empty();
@@ -145,6 +149,122 @@ export class CannedPromptsModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+  }
+}
+
+export class CannedPromptPickerPopover {
+  private searchInput!: HTMLInputElement;
+  private resultsEl!: HTMLElement;
+  private popoverEl!: HTMLElement;
+  private filteredPrompts: CannedPrompt[] = [];
+  private selectedIndex = 0;
+  private closeOnOutsideClick = (event: MouseEvent) => {
+    if (!this.popoverEl.contains(event.target as Node)) this.close();
+  };
+
+  constructor(
+    private app: App,
+    private plugin: IAidePlugin,
+    private onSelect: (prompt: CannedPrompt) => void,
+    private anchorEl: HTMLElement,
+  ) {}
+
+  open(): void {
+    this.popoverEl = document.body.createDiv({
+      cls: "lm-copilot-prompt-picker-popover",
+    });
+    const anchorRect = this.anchorEl.getBoundingClientRect();
+    this.popoverEl.style.right = `${Math.max(8, window.innerWidth - anchorRect.right)}px`;
+    this.popoverEl.style.bottom = `${Math.max(8, window.innerHeight - anchorRect.top + 8)}px`;
+    this.searchInput = this.popoverEl.createEl("input", {
+      type: "search",
+      placeholder: "Search prompts...",
+      cls: "lm-copilot-prompt-picker-search",
+    });
+    this.searchInput.oninput = () => {
+      this.selectedIndex = 0;
+      this.renderResults();
+    };
+    this.searchInput.onkeydown = (event) => this.handleKeydown(event);
+    this.resultsEl = this.popoverEl.createDiv({
+      cls: "lm-copilot-prompt-picker-results",
+    });
+    this.renderResults();
+
+    const footer = this.popoverEl.createDiv({
+      cls: "lm-copilot-prompt-picker-footer",
+    });
+    const newPromptButton = footer.createEl("button", {
+      cls: "mod-cta",
+      text: "Add canned prompt",
+    });
+    newPromptButton.onclick = () => {
+      this.close();
+      const manager = new CannedPromptsModal(this.app, this.plugin);
+      manager.open();
+      manager.openNewPrompt();
+    };
+    window.setTimeout(() => {
+      document.addEventListener("mousedown", this.closeOnOutsideClick);
+      this.searchInput.focus();
+    }, 0);
+  }
+
+  private handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      this.selectedIndex = Math.min(
+        this.selectedIndex + 1,
+        this.filteredPrompts.length - 1,
+      );
+      this.renderResults();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+      this.renderResults();
+    } else if (event.key === "Enter" && this.filteredPrompts.length > 0) {
+      event.preventDefault();
+      this.insertPrompt(this.filteredPrompts[this.selectedIndex]);
+    }
+  }
+
+  private renderResults(): void {
+    const query = this.searchInput.value.trim().toLowerCase();
+    this.filteredPrompts = this.plugin.cannedPrompts.filter((prompt) =>
+      prompt.title.toLowerCase().includes(query),
+    );
+    this.selectedIndex = Math.min(
+      this.selectedIndex,
+      Math.max(this.filteredPrompts.length - 1, 0),
+    );
+    this.resultsEl.empty();
+
+    if (this.filteredPrompts.length === 0) {
+      this.resultsEl.createDiv({
+        cls: "lm-copilot-history-empty",
+        text: "No matching prompts.",
+      });
+      return;
+    }
+
+    this.filteredPrompts.forEach((prompt, index) => {
+      const result = this.resultsEl.createEl("button", {
+        cls: "lm-copilot-prompt-picker-result",
+        text: prompt.title,
+      });
+      if (index === this.selectedIndex) result.addClass("is-selected");
+      result.onclick = () => this.insertPrompt(prompt);
+    });
+  }
+
+  private insertPrompt(prompt: CannedPrompt): void {
+    this.onSelect(prompt);
+    this.close();
+  }
+
+  close(): void {
+    document.removeEventListener("mousedown", this.closeOnOutsideClick);
+    this.popoverEl?.remove();
   }
 }
 

@@ -75,7 +75,8 @@ export class AideSettingTab extends PluginSettingTab {
       });
 
     // System Prompt
-    new Setting(containerEl)
+    let resetSystemPromptButton: HTMLElement | null = null;
+    const systemPromptSetting = new Setting(containerEl)
       .setName("System Prompt")
       .setDesc(
         "The initial system instructions given to the model for every conversation.",
@@ -87,10 +88,26 @@ export class AideSettingTab extends PluginSettingTab {
           .onChange(async (val) => {
             this.plugin.settings.systemPrompt = val;
             await this.plugin.saveSettings();
+            resetSystemPromptButton?.toggleClass(
+              "is-hidden",
+              val === DEFAULT_SETTINGS.systemPrompt,
+            );
           });
         text.inputEl.rows = 4;
         text.inputEl.cols = 40;
       });
+    systemPromptSetting.addButton((button) => {
+      resetSystemPromptButton = button.buttonEl;
+      button.buttonEl.toggleClass(
+        "is-hidden",
+        this.plugin.settings.systemPrompt === DEFAULT_SETTINGS.systemPrompt,
+      );
+      button.setButtonText("Reset").onClick(async () => {
+        this.plugin.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
+        await this.plugin.saveSettings();
+        this.display();
+      });
+    });
 
     new Setting(containerEl)
       .setName("Canned Prompts")

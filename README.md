@@ -50,7 +50,7 @@ An AI assistant right-sidebar experience for Obsidian that connects seamlessly t
 ## Shortcuts & Commands
 
 - `Enter`: Send message
-- `Shift + Enter`: Insert new line
+- `Shift + Enter`: Insert new line in chat input
 - `Command Palette`:
   - `Aide: Open in side panel`
   - `Aide: New chat session`
