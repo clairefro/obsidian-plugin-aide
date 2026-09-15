@@ -1,10 +1,10 @@
 {
-  "id": "obsidian-plugin-lm-studio-personal",
+  "id": "obsidian-plugin-aide",
   "name": "Aide",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "description": "Aide: right sidebar AI assistant powered by local LM Studio. Supports reasoning models, active note context, and conversation history.",
-  "author": "Obsidian User",
+  "author": "Claire Froelich",
   "authorUrl": "",
   "fundingUrl": "",
   "isDesktopOnly": true

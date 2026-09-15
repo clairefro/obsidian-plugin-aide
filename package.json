@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-plugin-lm-studio-personal",
+  "name": "obsidian-plugin-aide",
   "version": "1.0.0",
-  "description": "Aide - AI assistant powered by local LM Studio server",
+  "description": "AI copilot powered by local LM Studio/Ollama server",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
