@@ -2,6 +2,7 @@ import {
   ItemView,
   WorkspaceLeaf,
   MarkdownRenderer,
+  Menu,
   setIcon,
   Notice,
   TFile,
@@ -28,6 +29,7 @@ export class AideChatView extends ItemView {
   private messagesContainerEl!: HTMLElement;
   private inputContainerEl!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
+  private cannedPromptsBtnEl!: HTMLButtonElement;
   private sendBtnEl!: HTMLButtonElement;
   private stopBtnEl!: HTMLButtonElement;
   private statusEl!: HTMLElement;
@@ -208,6 +210,14 @@ export class AideChatView extends ItemView {
       cls: "lm-copilot-buttons-wrapper",
     });
 
+    this.cannedPromptsBtnEl = buttonsWrapper.createEl("button", {
+      cls: "clickable-icon lm-copilot-icon-btn lm-copilot-canned-prompts-btn",
+      attr: { "aria-label": "Insert canned prompt" },
+    });
+    setIcon(this.cannedPromptsBtnEl, "list-plus");
+    this.cannedPromptsBtnEl.onclick = (event) => this.showCannedPromptsMenu(event);
+    this.updateCannedPromptsDropdown();
+
     this.sendBtnEl = buttonsWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-send-btn",
       attr: { "aria-label": "Send Message" },
@@ -221,6 +231,27 @@ export class AideChatView extends ItemView {
     });
     setIcon(this.stopBtnEl, "square");
     this.stopBtnEl.onclick = () => this.stopGeneration();
+  }
+
+  public updateCannedPromptsDropdown(): void {
+    if (!this.cannedPromptsBtnEl) return;
+    this.cannedPromptsBtnEl.disabled = this.plugin.cannedPrompts.length === 0;
+  }
+
+  private showCannedPromptsMenu(event: MouseEvent): void {
+    const menu = new Menu();
+    for (const prompt of this.plugin.cannedPrompts) {
+      menu.addItem((item) => {
+        item.setTitle(prompt.title);
+        item.setIcon("list-plus");
+        item.onClick(() => {
+          this.inputEl.value = prompt.content;
+          this.inputEl.dispatchEvent(new Event("input"));
+          this.inputEl.focus();
+        });
+      });
+    }
+    menu.showAtMouseEvent(event);
   }
 
   // -------------------------------------------------------------

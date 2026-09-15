@@ -412,6 +412,29 @@
   min-height: 16px;
 }
 
+.lm-copilot-canned-prompts-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.lm-copilot-prompt-file-actions {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.lm-copilot-prompt-editor-title,
+.lm-copilot-prompt-editor-content {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.lm-copilot-prompt-editor-content {
+  min-height: 180px;
+  resize: vertical;
+}
+
 .lm-copilot-input-wrapper {
   display: flex;
   align-items: flex-end;

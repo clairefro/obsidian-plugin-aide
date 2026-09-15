@@ -4,6 +4,7 @@ main.js
 
 # Local chat history (private conversation logs)
 history.json
+prompts.json
 
 # Operating system files
 .DS_Store

@@ -28,7 +28,7 @@ __export(main_exports, {
   default: () => AidePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/types.ts
 var DEFAULT_SETTINGS = {
@@ -45,7 +45,7 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/settings.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 
 // src/api/lmStudioClient.ts
 var LMStudioClient = class _LMStudioClient {
@@ -475,8 +475,197 @@ var LMStudioClient = class _LMStudioClient {
   }
 };
 
+// src/views/CannedPromptsModal.ts
+var import_obsidian = require("obsidian");
+var CannedPromptsModal = class extends import_obsidian.Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+  onOpen() {
+    this.render();
+  }
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("lm-copilot-prompts-modal");
+    const header = contentEl.createDiv({ cls: "lm-copilot-history-header" });
+    header.createEl("h2", { text: "Canned Prompts" });
+    const addButton = header.createEl("button", {
+      cls: "mod-cta",
+      text: "New Prompt"
+    });
+    addButton.onclick = () => this.openEditor();
+    const actions = contentEl.createDiv({
+      cls: "lm-copilot-prompt-file-actions"
+    });
+    const importButton = actions.createEl("button", { text: "Import JSON" });
+    importButton.onclick = () => this.importPrompts();
+    const exportButton = actions.createEl("button", { text: "Export JSON" });
+    exportButton.onclick = () => this.exportPrompts();
+    const list = contentEl.createDiv({ cls: "lm-copilot-history-list" });
+    if (this.plugin.cannedPrompts.length === 0) {
+      list.createDiv({
+        cls: "lm-copilot-history-empty",
+        text: "No saved prompts yet."
+      });
+      return;
+    }
+    for (const prompt2 of this.plugin.cannedPrompts) {
+      const item = list.createDiv({ cls: "lm-copilot-history-item" });
+      const info = item.createDiv({ cls: "lm-copilot-history-info" });
+      info.createDiv({ cls: "lm-copilot-history-title", text: prompt2.title });
+      info.createDiv({
+        cls: "lm-copilot-history-meta",
+        text: prompt2.content.replace(/\s+/g, " ").slice(0, 100)
+      });
+      info.onclick = () => this.openEditor(prompt2);
+      const itemActions = item.createDiv({ cls: "lm-copilot-history-actions" });
+      const editButton = itemActions.createEl("button", {
+        cls: "clickable-icon lm-copilot-icon-btn",
+        attr: { "aria-label": `Edit ${prompt2.title}` }
+      });
+      (0, import_obsidian.setIcon)(editButton, "pencil");
+      editButton.onclick = () => this.openEditor(prompt2);
+      const deleteButton = itemActions.createEl("button", {
+        cls: "clickable-icon lm-copilot-icon-btn mod-delete",
+        attr: { "aria-label": `Delete ${prompt2.title}` }
+      });
+      (0, import_obsidian.setIcon)(deleteButton, "trash-2");
+      deleteButton.onclick = async () => {
+        this.plugin.cannedPrompts = this.plugin.cannedPrompts.filter(
+          (item2) => item2.id !== prompt2.id
+        );
+        await this.plugin.saveCannedPrompts();
+        this.plugin.updateCannedPromptsInViews();
+        this.render();
+      };
+    }
+  }
+  openEditor(prompt2) {
+    new CannedPromptEditorModal(
+      this.app,
+      this.plugin,
+      prompt2,
+      () => this.render()
+    ).open();
+  }
+  importPrompts() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const imported = JSON.parse(await file.text());
+        if (!Array.isArray(imported))
+          throw new Error("Expected an array of prompts.");
+        const now = Date.now();
+        const validPrompts = imported.filter(
+          (item) => typeof item?.title === "string" && typeof item?.content === "string"
+        ).map((item) => ({
+          id: typeof item.id === "string" ? item.id : `prompt_${now}_${Math.random().toString(36).slice(2, 7)}`,
+          title: item.title.trim(),
+          content: item.content,
+          createdAt: typeof item.createdAt === "number" ? item.createdAt : now,
+          updatedAt: now
+        })).filter((item) => item.title && item.content);
+        if (validPrompts.length === 0)
+          throw new Error("No valid prompts found.");
+        this.plugin.cannedPrompts = validPrompts;
+        await this.plugin.saveCannedPrompts();
+        this.plugin.updateCannedPromptsInViews();
+        this.render();
+        new import_obsidian.Notice(`Imported ${validPrompts.length} canned prompt(s).`);
+      } catch (error) {
+        new import_obsidian.Notice(`Could not import prompts: ${error.message}`);
+      }
+    };
+    input.click();
+  }
+  exportPrompts() {
+    const blob = new Blob(
+      [JSON.stringify(this.plugin.cannedPrompts, null, 2)],
+      {
+        type: "application/json"
+      }
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "aide-prompts.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+var CannedPromptEditorModal = class extends import_obsidian.Modal {
+  constructor(app, plugin, prompt2, onSaved) {
+    super(app);
+    this.plugin = plugin;
+    this.prompt = prompt2;
+    this.onSaved = onSaved;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", {
+      text: this.prompt ? "Edit Prompt" : "New Prompt"
+    });
+    const titleInput = contentEl.createEl("input", {
+      type: "text",
+      value: this.prompt?.title || "",
+      placeholder: "Prompt name"
+    });
+    titleInput.addClass("lm-copilot-prompt-editor-title");
+    const contentInput = contentEl.createEl("textarea", {
+      text: this.prompt?.content || "",
+      attr: { placeholder: "Prompt text" }
+    });
+    contentInput.addClass("lm-copilot-prompt-editor-content");
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const cancelButton = actions.createEl("button", { text: "Cancel" });
+    cancelButton.onclick = () => this.close();
+    const saveButton = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "Save"
+    });
+    saveButton.onclick = async () => {
+      const title = titleInput.value.trim();
+      const content = contentInput.value.trim();
+      if (!title || !content) {
+        new import_obsidian.Notice("A prompt needs both a name and text.");
+        return;
+      }
+      const now = Date.now();
+      const savedPrompt = {
+        id: this.prompt?.id || `prompt_${now}_${Math.random().toString(36).slice(2, 7)}`,
+        title,
+        content,
+        createdAt: this.prompt?.createdAt || now,
+        updatedAt: now
+      };
+      const index = this.plugin.cannedPrompts.findIndex(
+        (item) => item.id === savedPrompt.id
+      );
+      if (index >= 0) this.plugin.cannedPrompts[index] = savedPrompt;
+      else this.plugin.cannedPrompts.push(savedPrompt);
+      await this.plugin.saveCannedPrompts();
+      this.plugin.updateCannedPromptsInViews();
+      this.onSaved();
+      this.close();
+    };
+    titleInput.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/settings.ts
-var AideSettingTab = class extends import_obsidian.PluginSettingTab {
+var AideSettingTab = class extends import_obsidian2.PluginSettingTab {
   plugin;
   modelDropdown = null;
   connectionStatusEl = null;
@@ -488,7 +677,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "Aide Settings" });
-    new import_obsidian.Setting(containerEl).setName("LM Studio Base URL").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("LM Studio Base URL").setDesc(
       "The base URL of your local LM Studio server (usually http://127.0.0.1:1234/v1)."
     ).addText(
       (text) => text.setPlaceholder("http://127.0.0.1:1234/v1").setValue(this.plugin.settings.baseUrl).onChange(async (value) => {
@@ -507,7 +696,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
     this.connectionStatusEl = containerEl.createDiv({
       cls: "lm-copilot-settings-status"
     });
-    const modelSetting = new import_obsidian.Setting(containerEl).setName("Default Model").setDesc("The active or loaded model to query in LM Studio.").addDropdown((dropdown) => {
+    const modelSetting = new import_obsidian2.Setting(containerEl).setName("Default Model").setDesc("The active or loaded model to query in LM Studio.").addDropdown((dropdown) => {
       this.modelDropdown = dropdown;
       this.populateModelDropdown(dropdown);
       dropdown.onChange(async (val) => {
@@ -516,7 +705,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.updateModelInViews(val);
       });
     });
-    new import_obsidian.Setting(containerEl).setName("System Prompt").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("System Prompt").setDesc(
       "The initial system instructions given to the model for every conversation."
     ).addTextArea((text) => {
       text.setPlaceholder("Enter system prompt...").setValue(this.plugin.settings.systemPrompt).onChange(async (val) => {
@@ -526,7 +715,14 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
       text.inputEl.rows = 4;
       text.inputEl.cols = 40;
     });
-    new import_obsidian.Setting(containerEl).setName("Show Reasoning & Thinking").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Canned Prompts").setDesc(
+      "Create, edit, import, or export reusable prompts stored locally in prompts.json."
+    ).addButton(
+      (button) => button.setButtonText("Manage Prompts").onClick(() => {
+        new CannedPromptsModal(this.app, this.plugin).open();
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Show Reasoning & Thinking").setDesc(
       "Display reasoning thought chains in collapsible blocks for reasoning models (DeepSeek R1, GPT-OSS, QwQ, etc.)."
     ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.showReasoning).onChange(async (val) => {
@@ -534,7 +730,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Include Active Note / Selection by Default").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Include Active Note / Selection by Default").setDesc(
       "Automatically attach currently selected text (or the active note if nothing is selected) as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat."
     ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.includeActiveNoteByDefault).onChange(async (val) => {
@@ -542,7 +738,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Max Context Characters").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Max Context Characters").setDesc(
       "Maximum characters of the active note to send to the model to avoid exceeding context window limits."
     ).addText(
       (text) => text.setPlaceholder("24000").setValue(String(this.plugin.settings.maxContextChars)).onChange(async (val) => {
@@ -554,7 +750,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     containerEl.createEl("h3", { text: "Model Parameters" });
-    new import_obsidian.Setting(containerEl).setName("Temperature").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Temperature").setDesc(
       "Sampling temperature (0.0 = deterministic and focused, 1.0 = creative)."
     ).addSlider(
       (slider) => slider.setLimits(0, 1.5, 0.05).setValue(this.plugin.settings.temperature).setDynamicTooltip().onChange(async (val) => {
@@ -562,7 +758,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Max Output Tokens").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Max Output Tokens").setDesc(
       "Maximum tokens to generate per response (-1 or 0 for unlimited / model default)."
     ).addText(
       (text) => text.setPlaceholder("4096").setValue(String(this.plugin.settings.maxTokens)).onChange(async (val) => {
@@ -574,7 +770,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     containerEl.createEl("h3", { text: "Chat History" });
-    new import_obsidian.Setting(containerEl).setName("Save Chat History").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Save Chat History").setDesc(
       "Automatically persist conversation history across sessions. When disabled, chats exist only in memory during the session."
     ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.saveChatHistory).onChange(async (val) => {
@@ -582,7 +778,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Clear All Chat History").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Clear All Chat History").setDesc(
       `Permanently delete all saved chat sessions (${this.plugin.conversations.length} currently saved).`
     ).addButton(
       (btn) => btn.setButtonText("Clear History").setWarning().onClick(async () => {
@@ -595,7 +791,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
           if (view) {
             view.startNewChat();
           }
-          new import_obsidian.Notice("Chat history has been cleared.");
+          new import_obsidian2.Notice("Chat history has been cleared.");
           this.display();
         }
       })
@@ -634,13 +830,13 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
           text: "\u26A0\uFE0F Connected to server, but no models found. Make sure a model is loaded in LM Studio.",
           cls: "lm-copilot-status-warning"
         });
-        new import_obsidian.Notice("LM Studio connected, but no models found.");
+        new import_obsidian2.Notice("LM Studio connected, but no models found.");
       } else {
         this.connectionStatusEl.createSpan({
           text: `\u2705 Connected! Found ${models.length} model(s).`,
           cls: "lm-copilot-status-success"
         });
-        new import_obsidian.Notice(`Found ${models.length} model(s) from LM Studio!`);
+        new import_obsidian2.Notice(`Found ${models.length} model(s) from LM Studio!`);
         if (!this.plugin.settings.selectedModel || !models.some((m) => m.id === this.plugin.settings.selectedModel)) {
           this.plugin.settings.selectedModel = models[0].id;
           await this.plugin.saveSettings();
@@ -655,7 +851,7 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         text: `\u274C Connection failed: ${err.message || "Make sure LM Studio local server is running."}`,
         cls: "lm-copilot-status-error"
       });
-      new import_obsidian.Notice(
+      new import_obsidian2.Notice(
         `Failed to connect to LM Studio at ${this.plugin.settings.baseUrl}`
       );
     }
@@ -663,11 +859,11 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/views/ChatView.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/views/HistoryModal.ts
-var import_obsidian2 = require("obsidian");
-var ChatHistoryModal = class extends import_obsidian2.Modal {
+var import_obsidian3 = require("obsidian");
+var ChatHistoryModal = class extends import_obsidian3.Modal {
   plugin;
   onSelectChat;
   onNewChat;
@@ -775,7 +971,7 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
         cls: "clickable-icon lm-copilot-icon-btn",
         attr: { "aria-label": "Rename chat" }
       });
-      (0, import_obsidian2.setIcon)(editBtn, "pencil");
+      (0, import_obsidian3.setIcon)(editBtn, "pencil");
       editBtn.onclick = (e) => {
         e.stopPropagation();
         const newTitle = prompt("Rename chat title:", chat.title);
@@ -790,7 +986,7 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
         cls: "clickable-icon lm-copilot-icon-btn mod-delete",
         attr: { "aria-label": "Delete chat" }
       });
-      (0, import_obsidian2.setIcon)(deleteBtn, "trash-2");
+      (0, import_obsidian3.setIcon)(deleteBtn, "trash-2");
       deleteBtn.onclick = async (e) => {
         e.stopPropagation();
         this.plugin.conversations = this.plugin.conversations.filter(
@@ -812,7 +1008,7 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
 
 // src/views/ChatView.ts
 var AIDE_VIEW_TYPE = "aide-chat-view";
-var AideChatView = class extends import_obsidian3.ItemView {
+var AideChatView = class extends import_obsidian4.ItemView {
   plugin;
   // UI Elements
   headerEl;
@@ -821,6 +1017,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
   messagesContainerEl;
   inputContainerEl;
   inputEl;
+  cannedPromptsBtnEl;
   sendBtnEl;
   stopBtnEl;
   statusEl;
@@ -885,7 +1082,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "Refresh Models from LM Studio" }
     });
-    (0, import_obsidian3.setIcon)(refreshBtn, "refresh-cw");
+    (0, import_obsidian4.setIcon)(refreshBtn, "refresh-cw");
     refreshBtn.onclick = async () => {
       refreshBtn.addClass("lm-spinning");
       await this.refreshModelsDropdown();
@@ -898,13 +1095,13 @@ var AideChatView = class extends import_obsidian3.ItemView {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "New Chat" }
     });
-    (0, import_obsidian3.setIcon)(newChatBtn, "plus");
+    (0, import_obsidian4.setIcon)(newChatBtn, "plus");
     newChatBtn.onclick = () => this.startNewChat();
     const historyBtn = headerActions.createEl("button", {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "Chat History" }
     });
-    (0, import_obsidian3.setIcon)(historyBtn, "history");
+    (0, import_obsidian4.setIcon)(historyBtn, "history");
     historyBtn.onclick = () => {
       new ChatHistoryModal(
         this.app,
@@ -917,7 +1114,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "Open Aide Settings" }
     });
-    (0, import_obsidian3.setIcon)(settingsBtn, "settings");
+    (0, import_obsidian4.setIcon)(settingsBtn, "settings");
     settingsBtn.onclick = () => this.plugin.openSettings();
   }
   buildContextBar(parent) {
@@ -960,18 +1157,44 @@ var AideChatView = class extends import_obsidian3.ItemView {
     const buttonsWrapper = inputWrapper.createDiv({
       cls: "lm-copilot-buttons-wrapper"
     });
+    this.cannedPromptsBtnEl = buttonsWrapper.createEl("button", {
+      cls: "clickable-icon lm-copilot-icon-btn lm-copilot-canned-prompts-btn",
+      attr: { "aria-label": "Insert canned prompt" }
+    });
+    (0, import_obsidian4.setIcon)(this.cannedPromptsBtnEl, "list-plus");
+    this.cannedPromptsBtnEl.onclick = (event) => this.showCannedPromptsMenu(event);
+    this.updateCannedPromptsDropdown();
     this.sendBtnEl = buttonsWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-send-btn",
       attr: { "aria-label": "Send Message" }
     });
-    (0, import_obsidian3.setIcon)(this.sendBtnEl, "send");
+    (0, import_obsidian4.setIcon)(this.sendBtnEl, "send");
     this.sendBtnEl.onclick = () => this.handleSendMessage();
     this.stopBtnEl = buttonsWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-stop-btn is-hidden",
       attr: { "aria-label": "Stop Generation" }
     });
-    (0, import_obsidian3.setIcon)(this.stopBtnEl, "square");
+    (0, import_obsidian4.setIcon)(this.stopBtnEl, "square");
     this.stopBtnEl.onclick = () => this.stopGeneration();
+  }
+  updateCannedPromptsDropdown() {
+    if (!this.cannedPromptsBtnEl) return;
+    this.cannedPromptsBtnEl.disabled = this.plugin.cannedPrompts.length === 0;
+  }
+  showCannedPromptsMenu(event) {
+    const menu = new import_obsidian4.Menu();
+    for (const prompt2 of this.plugin.cannedPrompts) {
+      menu.addItem((item) => {
+        item.setTitle(prompt2.title);
+        item.setIcon("list-plus");
+        item.onClick(() => {
+          this.inputEl.value = prompt2.content;
+          this.inputEl.dispatchEvent(new Event("input"));
+          this.inputEl.focus();
+        });
+      });
+    }
+    menu.showAtMouseEvent(event);
   }
   // -------------------------------------------------------------
   // Context Management
@@ -1031,7 +1254,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       });
       const isSelection = this.activeContext.type === "selection";
       const iconSpan = pill.createSpan({ cls: "lm-copilot-context-icon" });
-      (0, import_obsidian3.setIcon)(iconSpan, isSelection ? "highlighter" : "file-text");
+      (0, import_obsidian4.setIcon)(iconSpan, isSelection ? "highlighter" : "file-text");
       const titleSpan = pill.createSpan({
         cls: "lm-copilot-context-title",
         text: isSelection ? `${this.activeContext.title}.md (Selection)` : `${this.activeContext.title}.md`
@@ -1041,7 +1264,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
         cls: "lm-copilot-context-remove",
         attr: { "aria-label": "Remove context" }
       });
-      (0, import_obsidian3.setIcon)(removeBtn, "x");
+      (0, import_obsidian4.setIcon)(removeBtn, "x");
       removeBtn.onclick = (e) => {
         e.stopPropagation();
         this.activeContext = null;
@@ -1058,7 +1281,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
         const iconSpan = attachBtn.createSpan({
           cls: "lm-copilot-context-icon"
         });
-        (0, import_obsidian3.setIcon)(iconSpan, "paperclip");
+        (0, import_obsidian4.setIcon)(iconSpan, "paperclip");
         attachBtn.createSpan({ text: `Attach ${activeFile.basename}.md` });
         attachBtn.onclick = () => {
           this.isContextManuallyRemoved = false;
@@ -1156,7 +1379,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
         cls: "lm-copilot-empty-state"
       });
       const iconEl = emptyStateEl.createDiv({ cls: "lm-copilot-empty-icon" });
-      (0, import_obsidian3.setIcon)(iconEl, "sparkles");
+      (0, import_obsidian4.setIcon)(iconEl, "sparkles");
       emptyStateEl.createEl("h3", { text: "Aide" });
       emptyStateEl.createEl("p", {
         text: "Ask questions, brainstorm ideas, analyze notes, or write content with your local LLMs."
@@ -1205,7 +1428,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       const brainIcon = summary.createSpan({
         cls: "lm-copilot-reasoning-icon"
       });
-      (0, import_obsidian3.setIcon)(brainIcon, "cpu");
+      (0, import_obsidian4.setIcon)(brainIcon, "cpu");
       summaryTitle = summary.createSpan({
         cls: "lm-copilot-reasoning-title",
         text: "Thinking Process"
@@ -1238,7 +1461,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
         cls: "lm-copilot-message-context-badge"
       });
       const isSelection = msg.contextIncluded.title.includes("(Selection)");
-      (0, import_obsidian3.setIcon)(contextBadge, isSelection ? "highlighter" : "file-text");
+      (0, import_obsidian4.setIcon)(contextBadge, isSelection ? "highlighter" : "file-text");
       contextBadge.createSpan({ text: msg.contextIncluded.title });
       contextBadge.title = `Attached context: ${msg.contextIncluded.path}`;
     }
@@ -1253,7 +1476,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       cls: "lm-copilot-message-body markdown-rendered"
     });
     if (msg.content) {
-      import_obsidian3.MarkdownRenderer.render(
+      import_obsidian4.MarkdownRenderer.render(
         this.app,
         msg.content,
         bodyEl,
@@ -1271,13 +1494,13 @@ var AideChatView = class extends import_obsidian3.ItemView {
       cls: "clickable-icon lm-copilot-icon-btn",
       attr: { "aria-label": "Copy Markdown" }
     });
-    (0, import_obsidian3.setIcon)(copyBtn, "copy");
+    (0, import_obsidian4.setIcon)(copyBtn, "copy");
     copyBtn.onclick = async () => {
       const textToCopy = msg.content || msg.reasoningContent || "";
       await navigator.clipboard.writeText(textToCopy);
-      new import_obsidian3.Notice("Copied message to clipboard!");
-      (0, import_obsidian3.setIcon)(copyBtn, "check");
-      setTimeout(() => (0, import_obsidian3.setIcon)(copyBtn, "copy"), 1500);
+      new import_obsidian4.Notice("Copied message to clipboard!");
+      (0, import_obsidian4.setIcon)(copyBtn, "check");
+      setTimeout(() => (0, import_obsidian4.setIcon)(copyBtn, "copy"), 1500);
     };
     return msgEl;
   }
@@ -1306,7 +1529,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
     if (!text || this.isGenerating) return;
     const model = this.modelSelectEl.value || this.plugin.settings.selectedModel;
     if (!model) {
-      new import_obsidian3.Notice("Please select or load a model in LM Studio first.");
+      new import_obsidian4.Notice("Please select or load a model in LM Studio first.");
       return;
     }
     if (this.currentConversation.messages.length === 0) {
@@ -1427,7 +1650,7 @@ ${m.content}`;
             const now = Date.now();
             if (now - lastRenderTime > 80) {
               bodyEl.empty();
-              import_obsidian3.MarkdownRenderer.render(
+              import_obsidian4.MarkdownRenderer.render(
                 this.app,
                 accumulatedContent,
                 bodyEl,
@@ -1488,7 +1711,7 @@ ${m.content}`;
           text: completionNote
         });
       } else {
-        await import_obsidian3.MarkdownRenderer.render(
+        await import_obsidian4.MarkdownRenderer.render(
           this.app,
           assistantMsg.content,
           bodyEl,
@@ -1506,7 +1729,7 @@ ${m.content}`;
 > \u26A0\uFE0F **Error:** ${err.message || "Failed to communicate with LM Studio."}`;
       }
       bodyEl.empty();
-      await import_obsidian3.MarkdownRenderer.render(
+      await import_obsidian4.MarkdownRenderer.render(
         this.app,
         assistantMsg.content,
         bodyEl,
@@ -1557,14 +1780,18 @@ ${m.content}`;
 };
 
 // src/main.ts
-var AidePlugin = class extends import_obsidian4.Plugin {
+var AidePlugin = class extends import_obsidian5.Plugin {
   settings = DEFAULT_SETTINGS;
   conversations = [];
+  cannedPrompts = [];
   currentConversationId = "";
   cachedModels = [];
   lastActiveMarkdownView = null;
   get historyFilePath() {
     return `${this.manifest.dir}/history.json`;
+  }
+  get cannedPromptsFilePath() {
+    return `${this.manifest.dir}/prompts.json`;
   }
   async onload() {
     console.log("[Aide] Loading plugin");
@@ -1620,20 +1847,18 @@ var AidePlugin = class extends import_obsidian4.Plugin {
             this.settings.baseUrl
           );
           this.cachedModels = models;
-          new import_obsidian4.Notice(`Found ${models.length} model(s) from LM Studio`);
+          new import_obsidian5.Notice(`Found ${models.length} model(s) from LM Studio`);
           this.updateModelInViews(this.settings.selectedModel);
         } catch (err) {
-          new import_obsidian4.Notice(`Failed to fetch models: ${err.message}`);
+          new import_obsidian5.Notice(`Failed to fetch models: ${err.message}`);
         }
       }
     });
     this.addSettingTab(new AideSettingTab(this.app, this));
-    this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(
-      import_obsidian4.MarkdownView
-    );
+    this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
-        if (leaf?.view instanceof import_obsidian4.MarkdownView) {
+        if (leaf?.view instanceof import_obsidian5.MarkdownView) {
           this.lastActiveMarkdownView = leaf.view;
         }
         this.updateContextInViews();
@@ -1641,7 +1866,7 @@ var AidePlugin = class extends import_obsidian4.Plugin {
     );
     this.registerEvent(
       this.app.workspace.on("editor-change", (_, view) => {
-        if (view instanceof import_obsidian4.MarkdownView) {
+        if (view instanceof import_obsidian5.MarkdownView) {
           this.lastActiveMarkdownView = view;
         }
         this.updateContextInViews();
@@ -1716,6 +1941,14 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       }
     }
   }
+  updateCannedPromptsInViews() {
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof AideChatView) {
+        leaf.view.updateCannedPromptsDropdown();
+      }
+    }
+  }
   async fetchModelsInBackground() {
     try {
       const models = await LMStudioClient.fetchModels(this.settings.baseUrl);
@@ -1741,6 +1974,7 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
     await this.loadConversations(data);
+    await this.loadCannedPrompts();
   }
   async loadConversations(legacyData) {
     const adapter = this.app.vault.adapter;
@@ -1806,6 +2040,33 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       );
     } catch (err) {
       console.error("[Aide] Error writing history.json:", err);
+    }
+  }
+  async loadCannedPrompts() {
+    const adapter = this.app.vault.adapter;
+    try {
+      if (!await adapter.exists(this.cannedPromptsFilePath)) {
+        this.cannedPrompts = [];
+        return;
+      }
+      const raw = await adapter.read(this.cannedPromptsFilePath);
+      const parsed = JSON.parse(raw);
+      this.cannedPrompts = Array.isArray(parsed) ? parsed.filter(
+        (prompt2) => typeof prompt2?.id === "string" && typeof prompt2?.title === "string" && typeof prompt2?.content === "string"
+      ) : [];
+    } catch (err) {
+      console.error("[Aide] Error reading prompts.json:", err);
+      this.cannedPrompts = [];
+    }
+  }
+  async saveCannedPrompts() {
+    try {
+      await this.app.vault.adapter.write(
+        this.cannedPromptsFilePath,
+        JSON.stringify(this.cannedPrompts, null, 2)
+      );
+    } catch (err) {
+      console.error("[Aide] Error writing prompts.json:", err);
     }
   }
 };

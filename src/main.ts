@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   Conversation,
   LMStudioModel,
+  CannedPrompt,
 } from "./types";
 import { AideSettingTab } from "./settings";
 import { AideChatView, AIDE_VIEW_TYPE } from "./views/ChatView";
@@ -20,12 +21,17 @@ type LegacyConversation = Conversation & { model?: string };
 export default class AidePlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
   conversations: Conversation[] = [];
+  cannedPrompts: CannedPrompt[] = [];
   currentConversationId: string = "";
   cachedModels: LMStudioModel[] = [];
   private lastActiveMarkdownView: MarkdownView | null = null;
 
   private get historyFilePath(): string {
     return `${this.manifest.dir}/history.json`;
+  }
+
+  private get cannedPromptsFilePath(): string {
+    return `${this.manifest.dir}/prompts.json`;
   }
 
   async onload(): Promise<void> {
@@ -212,6 +218,15 @@ export default class AidePlugin extends Plugin {
     }
   }
 
+  public updateCannedPromptsInViews(): void {
+    const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof AideChatView) {
+        leaf.view.updateCannedPromptsDropdown();
+      }
+    }
+  }
+
   private async fetchModelsInBackground(): Promise<void> {
     try {
       const models = await LMStudioClient.fetchModels(this.settings.baseUrl);
@@ -245,8 +260,9 @@ export default class AidePlugin extends Plugin {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
 
-    // Load conversations from dedicated history.json file
+    // Load private, plugin-local data files.
     await this.loadConversations(data);
+    await this.loadCannedPrompts();
   }
 
   private async loadConversations(
@@ -329,6 +345,40 @@ export default class AidePlugin extends Plugin {
       );
     } catch (err) {
       console.error("[Aide] Error writing history.json:", err);
+    }
+  }
+
+  private async loadCannedPrompts(): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    try {
+      if (!(await adapter.exists(this.cannedPromptsFilePath))) {
+        this.cannedPrompts = [];
+        return;
+      }
+      const raw = await adapter.read(this.cannedPromptsFilePath);
+      const parsed = JSON.parse(raw);
+      this.cannedPrompts = Array.isArray(parsed)
+        ? parsed.filter(
+            (prompt): prompt is CannedPrompt =>
+              typeof prompt?.id === "string" &&
+              typeof prompt?.title === "string" &&
+              typeof prompt?.content === "string",
+          )
+        : [];
+    } catch (err) {
+      console.error("[Aide] Error reading prompts.json:", err);
+      this.cannedPrompts = [];
+    }
+  }
+
+  async saveCannedPrompts(): Promise<void> {
+    try {
+      await this.app.vault.adapter.write(
+        this.cannedPromptsFilePath,
+        JSON.stringify(this.cannedPrompts, null, 2),
+      );
+    } catch (err) {
+      console.error("[Aide] Error writing prompts.json:", err);
     }
   }
 }

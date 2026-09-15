@@ -34,6 +34,14 @@ export interface ChatContextItem {
   content: string;
 }
 
+export interface CannedPrompt {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "system" | "user" | "assistant" | "tool";
@@ -76,15 +84,18 @@ export interface LMStudioModel {
 export interface IAidePlugin {
   settings: PluginSettings;
   conversations: Conversation[];
+  cannedPrompts: CannedPrompt[];
   currentConversationId: string;
   cachedModels: LMStudioModel[];
   saveSettings(): Promise<void>;
   saveConversations(): Promise<void>;
+  saveCannedPrompts(): Promise<void>;
   openSettings(): void;
   getContextMarkdownView(): MarkdownView | null;
   getActiveChatView(): any;
   updateContextInViews(): void;
   updateModelInViews(modelId: string): void;
+  updateCannedPromptsInViews(): void;
 }
 
 export interface StreamChatParams {

@@ -8,6 +8,7 @@ import {
 } from "obsidian";
 import { DEFAULT_SETTINGS, IAidePlugin } from "./types";
 import { LMStudioClient } from "./api/lmStudioClient";
+import { CannedPromptsModal } from "./views/CannedPromptsModal";
 
 export class AideSettingTab extends PluginSettingTab {
   plugin: IAidePlugin;
@@ -90,6 +91,17 @@ export class AideSettingTab extends PluginSettingTab {
         text.inputEl.rows = 4;
         text.inputEl.cols = 40;
       });
+
+    new Setting(containerEl)
+      .setName("Canned Prompts")
+      .setDesc(
+        "Create, edit, import, or export reusable prompts stored locally in prompts.json.",
+      )
+      .addButton((button) =>
+        button.setButtonText("Manage Prompts").onClick(() => {
+          new CannedPromptsModal(this.app, this.plugin).open();
+        }),
+      );
 
     // Reasoning Models
     new Setting(containerEl)
