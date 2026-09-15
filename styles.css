@@ -481,8 +481,13 @@
 }
 
 .lm-copilot-prompt-picker-result:hover,
-.lm-copilot-prompt-picker-result.is-selected {
+.lm-copilot-prompt-picker-result:focus-visible {
   background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.lm-copilot-prompt-picker-result.is-selected {
+  background: var(--background-modifier-active-hover);
   color: var(--text-normal);
 }
 
