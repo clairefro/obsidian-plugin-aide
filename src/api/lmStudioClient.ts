@@ -166,6 +166,15 @@ export class LMStudioClient {
       bodyPayload.max_tokens = params.maxTokens;
     }
 
+    if (
+      params.reasoningEffort &&
+      /(?:gpt-oss|deepseek[-_ ]?r1|qwq|reason(?:ing)?|think(?:ing)?)/i.test(
+        params.model,
+      )
+    ) {
+      bodyPayload.reasoning_effort = params.reasoningEffort;
+    }
+
     // Harmony uses <|end|> between analysis and final messages. Override LM
     // Studio's model defaults so it stops only after a final answer or tool call.
     if (params.model.toLowerCase().includes("gpt-oss")) {

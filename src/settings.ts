@@ -135,6 +135,26 @@ export class AideSettingTab extends PluginSettingTab {
           }),
       );
 
+    new Setting(containerEl)
+      .setName("Reasoning Level")
+      .setDesc(
+        "Controls the reasoning effort for supported reasoning models such as GPT-OSS, DeepSeek R1, and QwQ.",
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("low", "Low")
+          .addOption("medium", "Medium")
+          .addOption("high", "High")
+          .setValue(this.plugin.settings.reasoningLevel)
+          .onChange(async (value) => {
+            this.plugin.settings.reasoningLevel = value as
+              | "low"
+              | "medium"
+              | "high";
+            await this.plugin.saveSettings();
+          }),
+      );
+
     // Context Settings
     new Setting(containerEl)
       .setName("Include Active Note / Selection by Default")

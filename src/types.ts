@@ -6,6 +6,7 @@ export interface PluginSettings {
   systemPrompt: string;
   temperature: number;
   maxTokens: number;
+  reasoningLevel: "low" | "medium" | "high";
   includeActiveNoteByDefault: boolean;
   maxContextChars: number;
   autoTitleChat: boolean;
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     "You are Aide, an expert AI assistant integrated into Obsidian. Answer the user's request directly and completely, using note context only as evidence. Do not add unsolicited tips, suggestions for future note updates, next steps, follow-up offers, or extra sections. Provide recommendations or ask a follow-up question only when the user explicitly requests them or when they are necessary to answer accurately. Use concise Markdown when it improves readability.",
   temperature: 0.7,
   maxTokens: 8192,
+  reasoningLevel: "medium",
   includeActiveNoteByDefault: true,
   maxContextChars: 24000,
   autoTitleChat: true,
@@ -110,6 +112,7 @@ export interface StreamChatParams {
   }>;
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: "low" | "medium" | "high";
   systemPrompt?: string;
   // Prepared for future tool calling
   tools?: Array<{

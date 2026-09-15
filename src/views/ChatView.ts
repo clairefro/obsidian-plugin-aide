@@ -825,6 +825,7 @@ export class AideChatView extends ItemView {
         messages: apiMessages,
         temperature: this.plugin.settings.temperature,
         maxTokens: this.plugin.settings.maxTokens,
+        reasoningEffort: this.plugin.settings.reasoningLevel,
         signal: this.currentAbortController.signal,
         onToken: (contentChunk, reasoningChunk) => {
           if (reasoningChunk) {

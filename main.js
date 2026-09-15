@@ -37,6 +37,7 @@ var DEFAULT_SETTINGS = {
   systemPrompt: "You are Aide, an expert AI assistant integrated into Obsidian. Answer the user's request directly and completely, using note context only as evidence. Do not add unsolicited tips, suggestions for future note updates, next steps, follow-up offers, or extra sections. Provide recommendations or ask a follow-up question only when the user explicitly requests them or when they are necessary to answer accurately. Use concise Markdown when it improves readability.",
   temperature: 0.7,
   maxTokens: 8192,
+  reasoningLevel: "medium",
   includeActiveNoteByDefault: true,
   maxContextChars: 24e3,
   autoTitleChat: true,
@@ -179,6 +180,11 @@ var LMStudioClient = class _LMStudioClient {
     };
     if (params.maxTokens && params.maxTokens > 0) {
       bodyPayload.max_tokens = params.maxTokens;
+    }
+    if (params.reasoningEffort && /(?:gpt-oss|deepseek[-_ ]?r1|qwq|reason(?:ing)?|think(?:ing)?)/i.test(
+      params.model
+    )) {
+      bodyPayload.reasoning_effort = params.reasoningEffort;
     }
     if (params.model.toLowerCase().includes("gpt-oss")) {
       bodyPayload.stop = ["<|return|>", "<|call|>"];
@@ -853,6 +859,14 @@ var AideSettingTab = class extends import_obsidian2.PluginSettingTab {
     ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.showReasoning).onChange(async (val) => {
         this.plugin.settings.showReasoning = val;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Reasoning Level").setDesc(
+      "Controls the reasoning effort for supported reasoning models such as GPT-OSS, DeepSeek R1, and QwQ."
+    ).addDropdown(
+      (dropdown) => dropdown.addOption("low", "Low").addOption("medium", "Medium").addOption("high", "High").setValue(this.plugin.settings.reasoningLevel).onChange(async (value) => {
+        this.plugin.settings.reasoningLevel = value;
         await this.plugin.saveSettings();
       })
     );
@@ -1775,6 +1789,7 @@ ${m.content}`;
         messages: apiMessages,
         temperature: this.plugin.settings.temperature,
         maxTokens: this.plugin.settings.maxTokens,
+        reasoningEffort: this.plugin.settings.reasoningLevel,
         signal: this.currentAbortController.signal,
         onToken: (contentChunk, reasoningChunk) => {
           if (reasoningChunk) {
