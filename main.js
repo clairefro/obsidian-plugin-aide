@@ -913,6 +913,12 @@ var AideChatView = class extends import_obsidian3.ItemView {
         () => this.startNewChat()
       ).open();
     };
+    const settingsBtn = headerActions.createEl("button", {
+      cls: "clickable-icon lm-copilot-icon-btn",
+      attr: { "aria-label": "Open Aide Settings" }
+    });
+    (0, import_obsidian3.setIcon)(settingsBtn, "settings");
+    settingsBtn.onclick = () => this.plugin.openSettings();
   }
   buildContextBar(parent) {
     this.contextBarEl = parent.createDiv({ cls: "lm-copilot-context-bar" });
@@ -970,17 +976,6 @@ var AideChatView = class extends import_obsidian3.ItemView {
   // -------------------------------------------------------------
   // Context Management
   // -------------------------------------------------------------
-  getMostRecentMarkdownView() {
-    const active = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
-    if (active) return active;
-    const leaves = this.app.workspace.getLeavesOfType("markdown");
-    for (const leaf of leaves) {
-      if (leaf.view instanceof import_obsidian3.MarkdownView && leaf.view.file) {
-        return leaf.view;
-      }
-    }
-    return null;
-  }
   /**
    * Called by main plugin whenever active leaf / file / selection changes.
    */
@@ -991,7 +986,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       this.renderContextPill();
       return;
     }
-    const mdView = this.getMostRecentMarkdownView();
+    const mdView = this.plugin.getContextMarkdownView();
     const activeFile = mdView?.file || this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       try {
@@ -1054,7 +1049,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
         this.renderContextPill();
       };
     } else {
-      const mdView = this.getMostRecentMarkdownView();
+      const mdView = this.plugin.getContextMarkdownView();
       const activeFile = mdView?.file || this.app.workspace.getActiveFile();
       if (activeFile && activeFile.extension === "md") {
         const attachBtn = this.contextBarEl.createDiv({
@@ -1567,6 +1562,7 @@ var AidePlugin = class extends import_obsidian4.Plugin {
   conversations = [];
   currentConversationId = "";
   cachedModels = [];
+  lastActiveMarkdownView = null;
   get historyFilePath() {
     return `${this.manifest.dir}/history.json`;
   }
@@ -1632,13 +1628,22 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       }
     });
     this.addSettingTab(new AideSettingTab(this.app, this));
+    this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(
+      import_obsidian4.MarkdownView
+    );
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => {
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf?.view instanceof import_obsidian4.MarkdownView) {
+          this.lastActiveMarkdownView = leaf.view;
+        }
         this.updateContextInViews();
       })
     );
     this.registerEvent(
-      this.app.workspace.on("editor-change", () => {
+      this.app.workspace.on("editor-change", (_, view) => {
+        if (view instanceof import_obsidian4.MarkdownView) {
+          this.lastActiveMarkdownView = view;
+        }
         this.updateContextInViews();
       })
     );
@@ -1686,6 +1691,14 @@ var AidePlugin = class extends import_obsidian4.Plugin {
       return leaves[0].view;
     }
     return null;
+  }
+  getContextMarkdownView() {
+    return this.lastActiveMarkdownView;
+  }
+  openSettings() {
+    const settings = this.app.setting;
+    settings.open();
+    settings.openTabById(this.manifest.id);
   }
   updateContextInViews() {
     const leaves = this.app.workspace.getLeavesOfType(AIDE_VIEW_TYPE);

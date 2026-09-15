@@ -1,3 +1,5 @@
+import type { MarkdownView } from "obsidian";
+
 export interface PluginSettings {
   baseUrl: string;
   selectedModel: string;
@@ -78,6 +80,8 @@ export interface IAidePlugin {
   cachedModels: LMStudioModel[];
   saveSettings(): Promise<void>;
   saveConversations(): Promise<void>;
+  openSettings(): void;
+  getContextMarkdownView(): MarkdownView | null;
   getActiveChatView(): any;
   updateContextInViews(): void;
   updateModelInViews(modelId: string): void;

@@ -66,7 +66,7 @@ export class AideChatView extends ItemView {
     this.buildMessagesArea(container);
     this.buildInputArea(container);
 
-    // Load active file context initially
+    // Load the note that was active before the sidebar received focus.
     this.updateActiveFileContext();
 
     // Auto-fetch models on view open
@@ -147,6 +147,13 @@ export class AideChatView extends ItemView {
         () => this.startNewChat(),
       ).open();
     };
+
+    const settingsBtn = headerActions.createEl("button", {
+      cls: "clickable-icon lm-copilot-icon-btn",
+      attr: { "aria-label": "Open Aide Settings" },
+    });
+    setIcon(settingsBtn, "settings");
+    settingsBtn.onclick = () => this.plugin.openSettings();
   }
 
   private buildContextBar(parent: HTMLElement): void {
@@ -220,19 +227,6 @@ export class AideChatView extends ItemView {
   // Context Management
   // -------------------------------------------------------------
 
-  private getMostRecentMarkdownView(): MarkdownView | null {
-    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (active) return active;
-
-    const leaves = this.app.workspace.getLeavesOfType("markdown");
-    for (const leaf of leaves) {
-      if (leaf.view instanceof MarkdownView && leaf.view.file) {
-        return leaf.view;
-      }
-    }
-    return null;
-  }
-
   /**
    * Called by main plugin whenever active leaf / file / selection changes.
    */
@@ -244,7 +238,7 @@ export class AideChatView extends ItemView {
       return;
     }
 
-    const mdView = this.getMostRecentMarkdownView();
+    const mdView = this.plugin.getContextMarkdownView();
     const activeFile = mdView?.file || this.app.workspace.getActiveFile();
 
     if (activeFile && activeFile.extension === "md") {
@@ -323,7 +317,7 @@ export class AideChatView extends ItemView {
       };
     } else {
       // Show re-attach button if note is available in workspace
-      const mdView = this.getMostRecentMarkdownView();
+      const mdView = this.plugin.getContextMarkdownView();
       const activeFile = mdView?.file || this.app.workspace.getActiveFile();
       if (activeFile && activeFile.extension === "md") {
         const attachBtn = this.contextBarEl.createDiv({

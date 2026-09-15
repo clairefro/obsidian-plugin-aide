@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice } from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice, MarkdownView } from "obsidian";
 import {
   PluginSettings,
   DEFAULT_SETTINGS,
@@ -22,6 +22,7 @@ export default class AidePlugin extends Plugin {
   conversations: Conversation[] = [];
   currentConversationId: string = "";
   cachedModels: LMStudioModel[] = [];
+  private lastActiveMarkdownView: MarkdownView | null = null;
 
   private get historyFilePath(): string {
     return `${this.manifest.dir}/history.json`;
@@ -101,15 +102,24 @@ export default class AidePlugin extends Plugin {
     // Settings Tab
     this.addSettingTab(new AideSettingTab(this.app, this));
 
+    this.lastActiveMarkdownView =
+      this.app.workspace.getActiveViewOfType(MarkdownView);
+
     // Listen to active leaf and editor changes to automatically update active note / selection context
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => {
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf?.view instanceof MarkdownView) {
+          this.lastActiveMarkdownView = leaf.view;
+        }
         this.updateContextInViews();
       }),
     );
 
     this.registerEvent(
-      this.app.workspace.on("editor-change", () => {
+      this.app.workspace.on("editor-change", (_, view) => {
+        if (view instanceof MarkdownView) {
+          this.lastActiveMarkdownView = view;
+        }
         this.updateContextInViews();
       }),
     );
@@ -168,6 +178,20 @@ export default class AidePlugin extends Plugin {
       return leaves[0].view as AideChatView;
     }
     return null;
+  }
+
+  public getContextMarkdownView(): MarkdownView | null {
+    return this.lastActiveMarkdownView;
+  }
+
+  public openSettings(): void {
+    const settings = (
+      this.app as typeof this.app & {
+        setting: { open(): void; openTabById(id: string): void };
+      }
+    ).setting;
+    settings.open();
+    settings.openTabById(this.manifest.id);
   }
 
   public updateContextInViews(): void {
