@@ -1,8 +1,8 @@
 {
   "settings": {
     "baseUrl": "http://127.0.0.1:1234/v1",
-    "selectedModel": "huihui-gpt-oss-20b-abliterated",
-    "systemPrompt": "",
+    "selectedModel": "llama-3-8b-lexi-uncensored",
+    "systemPrompt": "You are Aide, an expert AI assistant integrated into Obsidian. Answer the user's request directly and completely, using note context only as evidence. Do not add unsolicited tips, suggestions for future note updates, next steps, follow-up offers, or extra sections. Provide recommendations or ask a follow-up question only when the user explicitly requests them or when they are necessary to answer accurately. Use concise Markdown when it improves readability.",
     "temperature": 0.7,
     "maxTokens": 4096,
     "includeActiveNoteByDefault": true,

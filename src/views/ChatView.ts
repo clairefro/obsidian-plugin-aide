@@ -177,9 +177,6 @@ export class AideChatView extends ItemView {
     });
 
     this.buildContextBar(this.inputContainerEl);
-    this.statusEl = this.inputContainerEl.createDiv({
-      cls: "lm-copilot-status-bar",
-    });
 
     const inputWrapper = this.inputContainerEl.createDiv({
       cls: "lm-copilot-input-wrapper",
@@ -234,6 +231,10 @@ export class AideChatView extends ItemView {
     });
     setIcon(this.stopBtnEl, "square");
     this.stopBtnEl.onclick = () => this.stopGeneration();
+
+    this.statusEl = this.inputContainerEl.createDiv({
+      cls: "lm-copilot-status-bar",
+    });
   }
 
   public updateCannedPromptsDropdown(): void {
