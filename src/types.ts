@@ -52,11 +52,11 @@ export interface ChatMessage {
   model?: string;
   reasoningContent?: string;
   timestamp: number;
-  contextIncluded?: {
+  contextIncluded?: Array<{
     title: string;
     path: string;
     preview?: string;
-  };
+  }>;
   // Ready for future tool calling implementation
   toolCalls?: Array<{
     id: string;

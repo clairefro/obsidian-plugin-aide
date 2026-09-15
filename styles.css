@@ -106,7 +106,9 @@
 /* Context Bar */
 .lm-copilot-context-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px;
   padding: 0 0 6px 0;
   background-color: transparent;
   border-bottom: none;
@@ -117,6 +119,7 @@
 
 .lm-copilot-context-pill {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   background-color: var(--background-primary);
   border: 1px solid var(--interactive-accent);
@@ -141,6 +144,7 @@
 }
 
 .lm-copilot-context-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

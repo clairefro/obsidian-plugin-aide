@@ -6,6 +6,7 @@ import {
   Notice,
   TFile,
   MarkdownView,
+  FuzzySuggestModal,
 } from "obsidian";
 import {
   ChatMessage,
@@ -38,8 +39,9 @@ export class AideChatView extends ItemView {
   private currentConversation: Conversation;
   private isGenerating: boolean = false;
   private currentAbortController: AbortController | null = null;
-  private activeContext: ChatContextItem | null = null;
+  private activeContexts: ChatContextItem[] = [];
   private isContextManuallyRemoved: boolean = false;
+  private manuallyAddedContextPaths = new Set<string>();
   private cannedPromptsPopover: CannedPromptPickerPopover | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: IAidePlugin) {
@@ -267,8 +269,11 @@ export class AideChatView extends ItemView {
    */
   public async updateActiveFileContext(): Promise<void> {
     if (this.isContextManuallyRemoved) return;
+    const manualContexts = this.activeContexts.filter((context) =>
+      this.manuallyAddedContextPaths.has(context.path),
+    );
     if (!this.plugin.settings.includeActiveNoteByDefault) {
-      this.activeContext = null;
+      this.activeContexts = manualContexts;
       this.renderContextPill();
       return;
     }
@@ -286,12 +291,18 @@ export class AideChatView extends ItemView {
               content.slice(0, this.plugin.settings.maxContextChars) +
               "\n...[Selection truncated]";
           }
-          this.activeContext = {
+          const activeContext: ChatContextItem = {
             type: "selection",
             title: activeFile.basename,
             path: activeFile.path,
             content: content,
           };
+          this.activeContexts = [
+            ...manualContexts,
+            ...(manualContexts.some((item) => item.path === activeContext.path)
+              ? []
+              : [activeContext]),
+          ];
         } else {
           let content = await this.app.vault.cachedRead(activeFile);
           if (content.length > this.plugin.settings.maxContextChars) {
@@ -299,19 +310,25 @@ export class AideChatView extends ItemView {
               content.slice(0, this.plugin.settings.maxContextChars) +
               "\n...[Context truncated]";
           }
-          this.activeContext = {
+          const activeContext: ChatContextItem = {
             type: "active_note",
             title: activeFile.basename,
             path: activeFile.path,
             content: content,
           };
+          this.activeContexts = [
+            ...manualContexts,
+            ...(manualContexts.some((item) => item.path === activeContext.path)
+              ? []
+              : [activeContext]),
+          ];
         }
       } catch (err) {
         console.error("Error reading active note / selection context:", err);
-        this.activeContext = null;
+        this.activeContexts = manualContexts;
       }
     } else {
-      this.activeContext = null;
+      this.activeContexts = manualContexts;
     }
 
     this.renderContextPill();
@@ -320,24 +337,24 @@ export class AideChatView extends ItemView {
   private renderContextPill(): void {
     this.contextBarEl.empty();
 
-    if (this.activeContext) {
+    for (const context of this.activeContexts) {
       const pill = this.contextBarEl.createDiv({
         cls: "lm-copilot-context-pill",
       });
 
-      const isSelection = this.activeContext.type === "selection";
+      const isSelection = context.type === "selection";
       const iconSpan = pill.createSpan({ cls: "lm-copilot-context-icon" });
       setIcon(iconSpan, isSelection ? "highlighter" : "file-text");
 
       const titleSpan = pill.createSpan({
         cls: "lm-copilot-context-title",
         text: isSelection
-          ? `${this.activeContext.title}.md (Selection)`
-          : `${this.activeContext.title}.md`,
+          ? `${context.title}.md (Selection)`
+          : `${context.title}.md`,
       });
       titleSpan.title = isSelection
-        ? `Selected text (${this.activeContext.content.length} chars) from ${this.activeContext.path}`
-        : `Full note context from ${this.activeContext.path}`;
+        ? `Selected text (${context.content.length} chars) from ${context.path}`
+        : `Full note context from ${context.path}`;
 
       const removeBtn = pill.createSpan({
         cls: "lm-copilot-context-remove",
@@ -346,30 +363,56 @@ export class AideChatView extends ItemView {
       setIcon(removeBtn, "x");
       removeBtn.onclick = (e) => {
         e.stopPropagation();
-        this.activeContext = null;
-        this.isContextManuallyRemoved = true;
+        this.activeContexts = this.activeContexts.filter(
+          (item) => item.path !== context.path,
+        );
+        if (this.manuallyAddedContextPaths.has(context.path)) {
+          this.manuallyAddedContextPaths.delete(context.path);
+        } else {
+          this.isContextManuallyRemoved = true;
+        }
         this.renderContextPill();
       };
-    } else {
-      // Show re-attach button if note is available in workspace
-      const mdView = this.plugin.getContextMarkdownView();
-      const activeFile = mdView?.file || this.app.workspace.getActiveFile();
-      if (activeFile && activeFile.extension === "md") {
-        const attachBtn = this.contextBarEl.createDiv({
-          cls: "lm-copilot-context-attach-btn",
-        });
-        const iconSpan = attachBtn.createSpan({
-          cls: "lm-copilot-context-icon",
-        });
-        setIcon(iconSpan, "paperclip");
-        attachBtn.createSpan({ text: `Attach ${activeFile.basename}.md` });
-
-        attachBtn.onclick = () => {
-          this.isContextManuallyRemoved = false;
-          this.updateActiveFileContext();
-        };
-      }
     }
+
+    const addContextBtn = this.contextBarEl.createDiv({
+      cls: "lm-copilot-context-attach-btn",
+    });
+    const iconSpan = addContextBtn.createSpan({
+      cls: "lm-copilot-context-icon",
+    });
+    setIcon(iconSpan, "paperclip");
+    addContextBtn.createSpan({ text: "Add note" });
+    addContextBtn.onclick = () => this.openContextFilePicker();
+  }
+
+  private openContextFilePicker(): void {
+    new VaultContextFileModal(this.app, (file) => {
+      void this.addFileContext(file);
+    }).open();
+  }
+
+  private async addFileContext(file: TFile): Promise<void> {
+    if (this.activeContexts.some((context) => context.path === file.path)) {
+      new Notice(`${file.basename} is already attached.`);
+      return;
+    }
+
+    let content = await this.app.vault.cachedRead(file);
+    if (content.length > this.plugin.settings.maxContextChars) {
+      content =
+        content.slice(0, this.plugin.settings.maxContextChars) +
+        "\n...[Context truncated]";
+    }
+    this.manuallyAddedContextPaths.add(file.path);
+    this.isContextManuallyRemoved = false;
+    this.activeContexts.push({
+      type: "active_note",
+      title: file.basename,
+      path: file.path,
+      content,
+    });
+    this.renderContextPill();
   }
 
   // -------------------------------------------------------------
@@ -566,6 +609,22 @@ export class AideChatView extends ItemView {
     return { container, details, summary, summaryTitle, body };
   }
 
+  private getMessageContexts(msg: ChatMessage): Array<{
+    title: string;
+    path: string;
+    preview?: string;
+  }> {
+    if (!msg.contextIncluded) return [];
+    if (Array.isArray(msg.contextIncluded)) return msg.contextIncluded;
+    return [
+      msg.contextIncluded as unknown as {
+        title: string;
+        path: string;
+        preview?: string;
+      },
+    ];
+  }
+
   private renderMessageElement(msg: ChatMessage): HTMLElement {
     const msgEl = this.messagesContainerEl.createDiv({
       cls: `lm-copilot-message lm-copilot-message-${msg.role}`,
@@ -578,14 +637,21 @@ export class AideChatView extends ItemView {
     headerEl.createSpan({ cls: "lm-copilot-message-author", text: roleName });
 
     // Context badge on user message if applicable
-    if (msg.role === "user" && msg.contextIncluded) {
+    const messageContexts = this.getMessageContexts(msg);
+    if (msg.role === "user" && messageContexts.length > 0) {
       const contextBadge = headerEl.createSpan({
         cls: "lm-copilot-message-context-badge",
       });
-      const isSelection = msg.contextIncluded.title.includes("(Selection)");
-      setIcon(contextBadge, isSelection ? "highlighter" : "file-text");
-      contextBadge.createSpan({ text: msg.contextIncluded.title });
-      contextBadge.title = `Attached context: ${msg.contextIncluded.path}`;
+      setIcon(contextBadge, "paperclip");
+      contextBadge.createSpan({
+        text:
+          messageContexts.length === 1
+            ? messageContexts[0].title
+            : `${messageContexts.length} files`,
+      });
+      contextBadge.title = messageContexts
+        .map((context) => `Attached context: ${context.path}`)
+        .join("\n");
     }
 
     // Reasoning / Thinking block for Assistant
@@ -606,7 +672,7 @@ export class AideChatView extends ItemView {
         this.app,
         msg.content,
         bodyEl,
-        this.activeContext?.path || "",
+        this.activeContexts[0]?.path || "",
         this,
       );
     } else if (msg.role === "assistant" && msg.reasoningContent) {
@@ -714,20 +780,20 @@ export class AideChatView extends ItemView {
     }
 
     // 1. Prepare User Message with optional context
-    const isSelectionContext = this.activeContext?.type === "selection";
     const userMsg: ChatMessage = {
       id: "msg_" + Date.now() + "_u",
       role: "user",
       content: text,
       timestamp: Date.now(),
-      contextIncluded: this.activeContext
-        ? {
-            title: isSelectionContext
-              ? `${this.activeContext.title} (Selection)`
-              : this.activeContext.title,
-            path: this.activeContext.path,
-            preview: this.activeContext.content.slice(0, 300),
-          }
+      contextIncluded: this.activeContexts.length
+        ? this.activeContexts.map((context) => ({
+            title:
+              context.type === "selection"
+                ? `${context.title} (Selection)`
+                : context.title,
+            path: context.path,
+            preview: context.content.slice(0, 300),
+          }))
         : undefined,
     };
 
@@ -764,18 +830,31 @@ export class AideChatView extends ItemView {
       const m = this.currentConversation.messages[i];
       if (m.role === "user") {
         let messageContent = m.content;
-        // If this message had context attached, format context block
-        if (
-          m.contextIncluded &&
+        const messageContexts =
           i === this.currentConversation.messages.length - 1 &&
-          this.activeContext
-        ) {
-          const contextHeader =
-            this.activeContext.type === "selection"
-              ? `[Selected text from Note: "${this.activeContext.title}" (${this.activeContext.path})]`
-              : `[Current Note: "${this.activeContext.title}" (${this.activeContext.path})]`;
-
-          messageContent = `${contextHeader}\n\`\`\`markdown\n${this.activeContext.content}\n\`\`\`\n\nUser Question:\n${m.content}`;
+          this.activeContexts.length > 0
+            ? this.activeContexts.map((context) => ({
+                title:
+                  context.type === "selection"
+                    ? `${context.title} (Selection)`
+                    : context.title,
+                path: context.path,
+                preview: context.content,
+              }))
+            : this.getMessageContexts(m);
+        if (messageContexts.length > 0) {
+          const contextBlocks = messageContexts.map((context) => {
+            const contextHeader = context.title.includes("(Selection)")
+              ? `[Selected text from Note: "${context.title.replace(
+                  " (Selection)",
+                  "",
+                )}" (${context.path})]`
+              : `[Current Note: "${context.title}" (${context.path})]`;
+            return `${contextHeader}\n\`\`\`markdown\n${context.preview || ""}\n\`\`\``;
+          });
+          messageContent = `${contextBlocks.join(
+            "\n\n",
+          )}\n\nUser Question:\n${m.content}`;
         }
         apiMessages.push({
           role: "user",
@@ -871,7 +950,7 @@ export class AideChatView extends ItemView {
                 this.app,
                 accumulatedContent,
                 bodyEl,
-                this.activeContext?.path || "",
+                this.activeContexts[0]?.path || "",
                 this,
               );
               lastRenderTime = now;
@@ -951,7 +1030,7 @@ export class AideChatView extends ItemView {
           this.app,
           assistantMsg.content,
           bodyEl,
-          this.activeContext?.path || "",
+          this.activeContexts[0]?.path || "",
           this,
         );
       }
@@ -973,7 +1052,7 @@ export class AideChatView extends ItemView {
         this.app,
         assistantMsg.content,
         bodyEl,
-        this.activeContext?.path || "",
+        this.activeContexts[0]?.path || "",
         this,
       );
     } finally {
@@ -1020,5 +1099,27 @@ export class AideChatView extends ItemView {
       this.plugin.conversations.push(this.currentConversation);
     }
     await this.plugin.saveConversations();
+  }
+}
+
+class VaultContextFileModal extends FuzzySuggestModal<TFile> {
+  constructor(
+    app: AideChatView["app"],
+    private onChoose: (file: TFile) => void,
+  ) {
+    super(app);
+    this.setPlaceholder("Add a Markdown file to chat context...");
+  }
+
+  getItems(): TFile[] {
+    return this.app.vault.getMarkdownFiles();
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.onChoose(file);
   }
 }
