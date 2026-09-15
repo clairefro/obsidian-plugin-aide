@@ -206,17 +206,18 @@ export class AideChatView extends ItemView {
       }
     };
 
-    const buttonsWrapper = inputWrapper.createDiv({
-      cls: "lm-copilot-buttons-wrapper",
-    });
-
-    this.cannedPromptsBtnEl = buttonsWrapper.createEl("button", {
+    this.cannedPromptsBtnEl = inputWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-icon-btn lm-copilot-canned-prompts-btn",
       attr: { "aria-label": "Insert canned prompt" },
     });
     setIcon(this.cannedPromptsBtnEl, "list-plus");
-    this.cannedPromptsBtnEl.onclick = (event) => this.showCannedPromptsMenu(event);
+    this.cannedPromptsBtnEl.onclick = (event) =>
+      this.showCannedPromptsMenu(event);
     this.updateCannedPromptsDropdown();
+
+    const buttonsWrapper = inputWrapper.createDiv({
+      cls: "lm-copilot-buttons-wrapper",
+    });
 
     this.sendBtnEl = buttonsWrapper.createEl("button", {
       cls: "clickable-icon lm-copilot-send-btn",

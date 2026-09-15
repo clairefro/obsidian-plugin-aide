@@ -417,6 +417,13 @@
   opacity: 0.35;
 }
 
+.lm-copilot-canned-prompts-btn {
+  position: absolute;
+  right: 40px;
+  bottom: 8px;
+  z-index: 1;
+}
+
 .lm-copilot-prompt-file-actions {
   display: flex;
   gap: 8px;
@@ -437,6 +444,7 @@
 
 .lm-copilot-input-wrapper {
   display: flex;
+  position: relative;
   align-items: flex-end;
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
@@ -456,7 +464,7 @@
   border: none;
   background: transparent;
   resize: none;
-  padding: 4px;
+  padding: 4px 32px 4px 4px;
   color: var(--text-normal);
   font-family: var(--font-interface);
   font-size: var(--font-ui-small);
