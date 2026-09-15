@@ -34,7 +34,7 @@ var import_obsidian4 = require("obsidian");
 var DEFAULT_SETTINGS = {
   baseUrl: "http://127.0.0.1:1234/v1",
   selectedModel: "",
-  systemPrompt: "You are an expert AI assistant integrated into Obsidian as Aide. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
+  systemPrompt: "You are Aide, an expert AI assistant integrated into Obsidian. Answer the user's request directly and completely, using note context only as evidence. Do not add unsolicited tips, suggestions for future note updates, next steps, follow-up offers, or extra sections. Provide recommendations or ask a follow-up question only when the user explicitly requests them or when they are necessary to answer accurately. Use concise Markdown when it improves readability.",
   temperature: 0.7,
   maxTokens: 8192,
   includeActiveNoteByDefault: true,
@@ -139,7 +139,7 @@ var LMStudioClient = class _LMStudioClient {
     }
     const delimiterRegexes = [
       /(?:\n|^)(?:---|\*\*\*)\s*\n+([\s\S]+)$/i,
-      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary|Sentence)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
       /(?:\n|^)(?:#{1,4}\s*)(?:Output|Result|Explanation)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i
     ];
     for (const regex of delimiterRegexes) {
@@ -153,6 +153,15 @@ var LMStudioClient = class _LMStudioClient {
       }
     }
     return { reasoning: "", answer: text };
+  }
+  /**
+   * Extracts an explicitly labelled conclusion when a model stops after its
+   * reasoning channel without producing a separate content channel.
+   */
+  static extractConclusionFromReasoning(reasoning) {
+    const conclusionRegex = /(?:^|[.!?]\s+)(?:so|thus|therefore)\s+(?:the\s+)?(?:final\s+)?(?:answer|response|reply)(?:\s+(?:is|should be))?\s*:\s*([^\n.!?]+(?:[.!?](?=\s|$))?)/gi;
+    const matches = Array.from(reasoning.matchAll(conclusionRegex));
+    return matches.at(-1)?.[1].trim() ?? "";
   }
   /**
    * Streams chat completion from LM Studio.
@@ -170,7 +179,9 @@ var LMStudioClient = class _LMStudioClient {
     };
     if (params.maxTokens && params.maxTokens > 0) {
       bodyPayload.max_tokens = params.maxTokens;
-      bodyPayload.max_completion_tokens = params.maxTokens;
+    }
+    if (params.model.toLowerCase().includes("gpt-oss")) {
+      bodyPayload.stop = ["<|return|>", "<|call|>"];
     }
     if (params.tools && params.tools.length > 0) {
       bodyPayload.tools = params.tools;
@@ -207,6 +218,7 @@ var LMStudioClient = class _LMStudioClient {
     let streamBuffer = "";
     let fullContent = "";
     let fullReasoning = "";
+    let finishReason;
     let accumulatedToolCalls = [];
     const START_TAGS = [
       "<think>",
@@ -406,6 +418,9 @@ var LMStudioClient = class _LMStudioClient {
               const parsed = JSON.parse(jsonStr);
               const choice = parsed.choices?.[0];
               if (!choice) continue;
+              if (typeof choice.finish_reason === "string") {
+                finishReason = choice.finish_reason;
+              }
               const delta = choice.delta || {};
               const reasoningDelta = delta.reasoning_content ?? delta.reasoning ?? delta.thought ?? delta.thinking ?? choice.message?.reasoning_content ?? choice.message?.reasoning;
               if (reasoningDelta && typeof reasoningDelta === "string") {
@@ -438,6 +453,9 @@ var LMStudioClient = class _LMStudioClient {
           fullContent = split.answer;
           fullReasoning = split.reasoning;
         }
+        if (!fullContent.trim()) {
+          fullContent = _LMStudioClient.extractConclusionFromReasoning(fullReasoning);
+        }
       } else if (fullContent.trim() && !fullReasoning.trim()) {
         const split = _LMStudioClient.splitReasoningAndAnswer(fullContent);
         if (split.reasoning && split.answer) {
@@ -451,6 +469,7 @@ var LMStudioClient = class _LMStudioClient {
     return {
       fullContent,
       fullReasoning,
+      finishReason,
       toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : void 0
     };
   }
@@ -515,8 +534,8 @@ var AideSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Include Active Note by Default").setDesc(
-      "Automatically attach the current active note as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat."
+    new import_obsidian.Setting(containerEl).setName("Include Active Note / Selection by Default").setDesc(
+      "Automatically attach currently selected text (or the active note if nothing is selected) as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat."
     ).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.includeActiveNoteByDefault).onChange(async (val) => {
         this.plugin.settings.includeActiveNoteByDefault = val;
@@ -744,10 +763,11 @@ var ChatHistoryModal = class extends import_obsidian2.Modal {
       metaEl.createSpan({
         text: `${dateStr} \xB7 ${msgCount} message${msgCount === 1 ? "" : "s"}`
       });
-      if (chat.model) {
+      const latestAssistantModel = [...chat.messages || []].reverse().find((message) => message.role === "assistant" && message.model)?.model;
+      if (latestAssistantModel) {
         metaEl.createSpan({
           cls: "lm-copilot-history-model-tag",
-          text: chat.model
+          text: latestAssistantModel
         });
       }
       const actionsEl = itemEl.createDiv({ cls: "lm-copilot-history-actions" });
@@ -829,12 +849,19 @@ var AideChatView = class extends import_obsidian3.ItemView {
     container.empty();
     container.addClass("lm-copilot-container");
     this.buildHeader(container);
-    this.buildContextBar(container);
     this.buildMessagesArea(container);
     this.buildInputArea(container);
     this.updateActiveFileContext();
     this.refreshModelsDropdown();
     this.renderConversation();
+    this.focusInput();
+  }
+  focusInput() {
+    if (this.inputEl) {
+      setTimeout(() => {
+        this.inputEl.focus();
+      }, 50);
+    }
   }
   async onClose() {
     this.stopGeneration();
@@ -852,7 +879,6 @@ var AideChatView = class extends import_obsidian3.ItemView {
     });
     this.modelSelectEl.onchange = async () => {
       this.plugin.settings.selectedModel = this.modelSelectEl.value;
-      this.currentConversation.model = this.modelSelectEl.value;
       await this.plugin.saveSettings();
     };
     const refreshBtn = modelGroup.createEl("button", {
@@ -901,6 +927,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
     this.inputContainerEl = parent.createDiv({
       cls: "lm-copilot-input-container"
     });
+    this.buildContextBar(this.inputContainerEl);
     this.statusEl = this.inputContainerEl.createDiv({
       cls: "lm-copilot-status-bar"
     });
@@ -943,8 +970,19 @@ var AideChatView = class extends import_obsidian3.ItemView {
   // -------------------------------------------------------------
   // Context Management
   // -------------------------------------------------------------
+  getMostRecentMarkdownView() {
+    const active = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
+    if (active) return active;
+    const leaves = this.app.workspace.getLeavesOfType("markdown");
+    for (const leaf of leaves) {
+      if (leaf.view instanceof import_obsidian3.MarkdownView && leaf.view.file) {
+        return leaf.view;
+      }
+    }
+    return null;
+  }
   /**
-   * Called by main plugin whenever active leaf / file changes.
+   * Called by main plugin whenever active leaf / file / selection changes.
    */
   async updateActiveFileContext() {
     if (this.isContextManuallyRemoved) return;
@@ -953,21 +991,36 @@ var AideChatView = class extends import_obsidian3.ItemView {
       this.renderContextPill();
       return;
     }
-    const activeFile = this.app.workspace.getActiveFile();
+    const mdView = this.getMostRecentMarkdownView();
+    const activeFile = mdView?.file || this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       try {
-        let content = await this.app.vault.cachedRead(activeFile);
-        if (content.length > this.plugin.settings.maxContextChars) {
-          content = content.slice(0, this.plugin.settings.maxContextChars) + "\n...[Context truncated]";
+        const selection = mdView?.editor?.getSelection()?.trim();
+        if (selection && selection.length > 0) {
+          let content = selection;
+          if (content.length > this.plugin.settings.maxContextChars) {
+            content = content.slice(0, this.plugin.settings.maxContextChars) + "\n...[Selection truncated]";
+          }
+          this.activeContext = {
+            type: "selection",
+            title: activeFile.basename,
+            path: activeFile.path,
+            content
+          };
+        } else {
+          let content = await this.app.vault.cachedRead(activeFile);
+          if (content.length > this.plugin.settings.maxContextChars) {
+            content = content.slice(0, this.plugin.settings.maxContextChars) + "\n...[Context truncated]";
+          }
+          this.activeContext = {
+            type: "active_note",
+            title: activeFile.basename,
+            path: activeFile.path,
+            content
+          };
         }
-        this.activeContext = {
-          type: "active_note",
-          title: activeFile.basename,
-          path: activeFile.path,
-          content
-        };
       } catch (err) {
-        console.error("Error reading active note context:", err);
+        console.error("Error reading active note / selection context:", err);
         this.activeContext = null;
       }
     } else {
@@ -981,16 +1034,17 @@ var AideChatView = class extends import_obsidian3.ItemView {
       const pill = this.contextBarEl.createDiv({
         cls: "lm-copilot-context-pill"
       });
+      const isSelection = this.activeContext.type === "selection";
       const iconSpan = pill.createSpan({ cls: "lm-copilot-context-icon" });
-      (0, import_obsidian3.setIcon)(iconSpan, "file-text");
+      (0, import_obsidian3.setIcon)(iconSpan, isSelection ? "highlighter" : "file-text");
       const titleSpan = pill.createSpan({
         cls: "lm-copilot-context-title",
-        text: `${this.activeContext.title}.md`
+        text: isSelection ? `${this.activeContext.title}.md (Selection)` : `${this.activeContext.title}.md`
       });
-      titleSpan.title = `Context from ${this.activeContext.path}`;
+      titleSpan.title = isSelection ? `Selected text (${this.activeContext.content.length} chars) from ${this.activeContext.path}` : `Full note context from ${this.activeContext.path}`;
       const removeBtn = pill.createSpan({
         cls: "lm-copilot-context-remove",
-        attr: { "aria-label": "Remove note context" }
+        attr: { "aria-label": "Remove context" }
       });
       (0, import_obsidian3.setIcon)(removeBtn, "x");
       removeBtn.onclick = (e) => {
@@ -1000,7 +1054,8 @@ var AideChatView = class extends import_obsidian3.ItemView {
         this.renderContextPill();
       };
     } else {
-      const activeFile = this.app.workspace.getActiveFile();
+      const mdView = this.getMostRecentMarkdownView();
+      const activeFile = mdView?.file || this.app.workspace.getActiveFile();
       if (activeFile && activeFile.extension === "md") {
         const attachBtn = this.contextBarEl.createDiv({
           cls: "lm-copilot-context-attach-btn"
@@ -1070,8 +1125,7 @@ var AideChatView = class extends import_obsidian3.ItemView {
       title: "New Chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      messages: [],
-      model: this.plugin.settings.selectedModel || ""
+      messages: []
     };
     this.plugin.currentConversationId = newConv.id;
     return newConv;
@@ -1093,9 +1147,10 @@ var AideChatView = class extends import_obsidian3.ItemView {
     }
     this.currentConversation = conv;
     this.plugin.currentConversationId = conv.id;
-    if (conv.model && this.plugin.cachedModels.some((m) => m.id === conv.model)) {
-      this.modelSelectEl.value = conv.model;
-      this.plugin.settings.selectedModel = conv.model;
+    const latestAssistantModel = [...conv.messages].reverse().find((message) => message.role === "assistant" && message.model)?.model;
+    if (latestAssistantModel && this.plugin.cachedModels.some((m) => m.id === latestAssistantModel)) {
+      this.modelSelectEl.value = latestAssistantModel;
+      this.plugin.settings.selectedModel = latestAssistantModel;
     }
     this.renderConversation();
   }
@@ -1187,9 +1242,10 @@ var AideChatView = class extends import_obsidian3.ItemView {
       const contextBadge = headerEl.createSpan({
         cls: "lm-copilot-message-context-badge"
       });
-      (0, import_obsidian3.setIcon)(contextBadge, "file-text");
+      const isSelection = msg.contextIncluded.title.includes("(Selection)");
+      (0, import_obsidian3.setIcon)(contextBadge, isSelection ? "highlighter" : "file-text");
       contextBadge.createSpan({ text: msg.contextIncluded.title });
-      contextBadge.title = `Attached note: ${msg.contextIncluded.path}`;
+      contextBadge.title = `Attached context: ${msg.contextIncluded.path}`;
     }
     if (msg.role === "assistant" && msg.reasoningContent) {
       const reasoningElements = this.getOrCreateReasoningElements(msgEl);
@@ -1231,7 +1287,21 @@ var AideChatView = class extends import_obsidian3.ItemView {
     return msgEl;
   }
   scrollToBottom() {
+    if (!this.messagesContainerEl) return;
     this.messagesContainerEl.scrollTop = this.messagesContainerEl.scrollHeight;
+  }
+  scrollExchangeIntoView(userEl) {
+    if (!this.messagesContainerEl) return;
+    const container = this.messagesContainerEl;
+    if (userEl) {
+      const userTop = userEl.offsetTop;
+      const exchangeHeight = container.scrollHeight - userTop;
+      if (exchangeHeight <= container.clientHeight + 60) {
+        container.scrollTop = Math.max(0, userTop - 12);
+        return;
+      }
+    }
+    container.scrollTop = container.scrollHeight;
   }
   // -------------------------------------------------------------
   // Chat Generation Logic
@@ -1247,20 +1317,21 @@ var AideChatView = class extends import_obsidian3.ItemView {
     if (this.currentConversation.messages.length === 0) {
       this.messagesContainerEl.empty();
     }
+    const isSelectionContext = this.activeContext?.type === "selection";
     const userMsg = {
       id: "msg_" + Date.now() + "_u",
       role: "user",
       content: text,
       timestamp: Date.now(),
       contextIncluded: this.activeContext ? {
-        title: this.activeContext.title,
+        title: isSelectionContext ? `${this.activeContext.title} (Selection)` : this.activeContext.title,
         path: this.activeContext.path,
         preview: this.activeContext.content.slice(0, 300)
       } : void 0
     };
     this.currentConversation.messages.push(userMsg);
-    this.renderMessageElement(userMsg);
-    this.scrollToBottom();
+    const userMsgEl = this.renderMessageElement(userMsg);
+    this.scrollExchangeIntoView(userMsgEl);
     if (this.currentConversation.messages.length === 1 && this.currentConversation.title === "New Chat") {
       const generatedTitle = text.slice(0, 32).replace(/[\r\n]+/g, " ");
       this.currentConversation.title = generatedTitle;
@@ -1279,7 +1350,8 @@ var AideChatView = class extends import_obsidian3.ItemView {
       if (m.role === "user") {
         let messageContent = m.content;
         if (m.contextIncluded && i === this.currentConversation.messages.length - 1 && this.activeContext) {
-          messageContent = `[Current Note: "${this.activeContext.title}" (${this.activeContext.path})]
+          const contextHeader = this.activeContext.type === "selection" ? `[Selected text from Note: "${this.activeContext.title}" (${this.activeContext.path})]` : `[Current Note: "${this.activeContext.title}" (${this.activeContext.path})]`;
+          messageContent = `${contextHeader}
 \`\`\`markdown
 ${this.activeContext.content}
 \`\`\`
@@ -1305,6 +1377,7 @@ ${m.content}`;
       id: "msg_" + Date.now() + "_a",
       role: "assistant",
       content: "",
+      model,
       reasoningContent: "",
       timestamp: Date.now()
     };
@@ -1313,7 +1386,7 @@ ${m.content}`;
     const bodyEl = assistantMsgEl.querySelector(
       ".lm-copilot-message-body"
     );
-    this.scrollToBottom();
+    this.scrollExchangeIntoView(userMsgEl);
     let accumulatedContent = "";
     let accumulatedReasoning = "";
     let lastRenderTime = 0;
@@ -1338,7 +1411,9 @@ ${m.content}`;
               this.statusEl.setText("Thinking...");
               elements.summaryTitle.setText("Thinking...");
             }
-            this.scrollToBottom();
+            if (this.messagesContainerEl.scrollHeight > this.messagesContainerEl.clientHeight + 40) {
+              this.scrollToBottom();
+            }
           }
           if (contentChunk) {
             accumulatedContent += contentChunk;
@@ -1365,7 +1440,9 @@ ${m.content}`;
                 this
               );
               lastRenderTime = now;
-              this.scrollToBottom();
+              if (this.messagesContainerEl.scrollHeight > this.messagesContainerEl.clientHeight + 40) {
+                this.scrollToBottom();
+              }
             }
           }
         }
@@ -1397,6 +1474,9 @@ ${m.content}`;
         elements.body.setText(assistantMsg.reasoningContent);
         elements.summaryTitle.setText("Thinking Process");
         elements.details.open = !assistantMsg.content;
+        elements.details.ontoggle = () => {
+          this.scrollExchangeIntoView(userMsgEl);
+        };
         if (!this.plugin.settings.showReasoning) {
           elements.container.addClass("is-hidden");
         } else {
@@ -1407,9 +1487,10 @@ ${m.content}`;
       }
       bodyEl.empty();
       if (!assistantMsg.content && assistantMsg.reasoningContent) {
+        const completionNote = result.finishReason === "length" ? "Model reached the output-token limit while reasoning, before it produced a final response. Increase Max Output Tokens and try again." : "Model completed with reasoning output but did not produce a separate final response.";
         bodyEl.createEl("p", {
           cls: "lm-copilot-reasoning-only-note",
-          text: "\u{1F4A1} Model finished thinking but produced no separate final response. (If generation was cut short, try increasing 'Max Output Tokens' in Settings)."
+          text: completionNote
         });
       } else {
         await import_obsidian3.MarkdownRenderer.render(
@@ -1444,7 +1525,7 @@ ${m.content}`;
       this.statusEl.empty();
       this.currentConversation.updatedAt = Date.now();
       await this.saveActiveConversation();
-      this.scrollToBottom();
+      this.scrollExchangeIntoView(userMsgEl);
     }
   }
   stopGeneration() {
@@ -1492,16 +1573,13 @@ var AidePlugin = class extends import_obsidian4.Plugin {
   async onload() {
     console.log("[Aide] Loading plugin");
     await this.loadPluginData();
-    this.registerView(
-      AIDE_VIEW_TYPE,
-      (leaf) => new AideChatView(leaf, this)
-    );
+    this.registerView(AIDE_VIEW_TYPE, (leaf) => new AideChatView(leaf, this));
     this.addRibbonIcon("bot", "Open Aide", () => {
       this.activateView();
     });
     this.addCommand({
-      id: "open-aide-sidebar",
-      name: "Open Aide in side panel",
+      id: "open",
+      name: "Open",
       callback: () => this.activateView()
     });
     this.addCommand({
@@ -1559,6 +1637,18 @@ var AidePlugin = class extends import_obsidian4.Plugin {
         this.updateContextInViews();
       })
     );
+    this.registerEvent(
+      this.app.workspace.on("editor-change", () => {
+        this.updateContextInViews();
+      })
+    );
+    this.registerDomEvent(document, "selectionchange", () => {
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.closest(".lm-copilot-container")) {
+        return;
+      }
+      this.updateContextInViews();
+    });
     this.fetchModelsInBackground();
   }
   async onunload() {
@@ -1584,6 +1674,10 @@ var AidePlugin = class extends import_obsidian4.Plugin {
     }
     if (leaf) {
       workspace.revealLeaf(leaf);
+      const view = this.getActiveChatView();
+      if (view) {
+        view.focusInput();
+      }
     }
   }
   getActiveChatView() {
@@ -1643,19 +1737,42 @@ var AidePlugin = class extends import_obsidian4.Plugin {
         const raw = await adapter.read(historyPath);
         const parsed = JSON.parse(raw);
         this.conversations = Array.isArray(parsed) ? parsed : [];
+        if (this.migrateConversationModels()) {
+          await this.saveConversations();
+        }
         return;
       }
     } catch (err) {
       console.error("[Aide] Error reading history.json:", err);
     }
     if (legacyData && Array.isArray(legacyData.conversations) && legacyData.conversations.length > 0) {
-      console.log(`[Aide] Migrating ${legacyData.conversations.length} conversation(s) from data.json to history.json`);
+      console.log(
+        `[Aide] Migrating ${legacyData.conversations.length} conversation(s) from data.json to history.json`
+      );
       this.conversations = legacyData.conversations;
+      this.migrateConversationModels();
       await this.saveConversations();
       await this.saveSettings();
     } else {
       this.conversations = [];
     }
+  }
+  /** Moves the legacy conversation model onto each historical assistant message. */
+  migrateConversationModels() {
+    let changed = false;
+    for (const conversation of this.conversations) {
+      if (conversation.model) {
+        for (const message of conversation.messages || []) {
+          if (message.role === "assistant" && !message.model) {
+            message.model = conversation.model;
+            changed = true;
+          }
+        }
+        delete conversation.model;
+        changed = true;
+      }
+    }
+    return changed;
   }
   async saveSettings() {
     const data = {
@@ -1670,7 +1787,10 @@ var AidePlugin = class extends import_obsidian4.Plugin {
     const adapter = this.app.vault.adapter;
     const historyPath = this.historyFilePath;
     try {
-      await adapter.write(historyPath, JSON.stringify(this.conversations, null, 2));
+      await adapter.write(
+        historyPath,
+        JSON.stringify(this.conversations, null, 2)
+      );
     } catch (err) {
       console.error("[Aide] Error writing history.json:", err);
     }

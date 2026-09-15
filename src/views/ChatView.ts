@@ -63,7 +63,6 @@ export class AideChatView extends ItemView {
     container.addClass("lm-copilot-container");
 
     this.buildHeader(container);
-    this.buildContextBar(container);
     this.buildMessagesArea(container);
     this.buildInputArea(container);
 
@@ -75,6 +74,17 @@ export class AideChatView extends ItemView {
 
     // Render initial welcome or conversation
     this.renderConversation();
+
+    // Auto focus the input textarea when the view is opened
+    this.focusInput();
+  }
+
+  public focusInput(): void {
+    if (this.inputEl) {
+      setTimeout(() => {
+        this.inputEl.focus();
+      }, 50);
+    }
   }
 
   async onClose(): Promise<void> {
@@ -98,7 +108,6 @@ export class AideChatView extends ItemView {
     });
     this.modelSelectEl.onchange = async () => {
       this.plugin.settings.selectedModel = this.modelSelectEl.value;
-      this.currentConversation.model = this.modelSelectEl.value;
       await this.plugin.saveSettings();
     };
 
@@ -156,6 +165,7 @@ export class AideChatView extends ItemView {
       cls: "lm-copilot-input-container",
     });
 
+    this.buildContextBar(this.inputContainerEl);
     this.statusEl = this.inputContainerEl.createDiv({
       cls: "lm-copilot-status-bar",
     });
@@ -210,8 +220,21 @@ export class AideChatView extends ItemView {
   // Context Management
   // -------------------------------------------------------------
 
+  private getMostRecentMarkdownView(): MarkdownView | null {
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (active) return active;
+
+    const leaves = this.app.workspace.getLeavesOfType("markdown");
+    for (const leaf of leaves) {
+      if (leaf.view instanceof MarkdownView && leaf.view.file) {
+        return leaf.view;
+      }
+    }
+    return null;
+  }
+
   /**
-   * Called by main plugin whenever active leaf / file changes.
+   * Called by main plugin whenever active leaf / file / selection changes.
    */
   public async updateActiveFileContext(): Promise<void> {
     if (this.isContextManuallyRemoved) return;
@@ -221,23 +244,41 @@ export class AideChatView extends ItemView {
       return;
     }
 
-    const activeFile = this.app.workspace.getActiveFile();
+    const mdView = this.getMostRecentMarkdownView();
+    const activeFile = mdView?.file || this.app.workspace.getActiveFile();
+
     if (activeFile && activeFile.extension === "md") {
       try {
-        let content = await this.app.vault.cachedRead(activeFile);
-        if (content.length > this.plugin.settings.maxContextChars) {
-          content =
-            content.slice(0, this.plugin.settings.maxContextChars) +
-            "\n...[Context truncated]";
+        const selection = mdView?.editor?.getSelection()?.trim();
+        if (selection && selection.length > 0) {
+          let content = selection;
+          if (content.length > this.plugin.settings.maxContextChars) {
+            content =
+              content.slice(0, this.plugin.settings.maxContextChars) +
+              "\n...[Selection truncated]";
+          }
+          this.activeContext = {
+            type: "selection",
+            title: activeFile.basename,
+            path: activeFile.path,
+            content: content,
+          };
+        } else {
+          let content = await this.app.vault.cachedRead(activeFile);
+          if (content.length > this.plugin.settings.maxContextChars) {
+            content =
+              content.slice(0, this.plugin.settings.maxContextChars) +
+              "\n...[Context truncated]";
+          }
+          this.activeContext = {
+            type: "active_note",
+            title: activeFile.basename,
+            path: activeFile.path,
+            content: content,
+          };
         }
-        this.activeContext = {
-          type: "active_note",
-          title: activeFile.basename,
-          path: activeFile.path,
-          content: content,
-        };
       } catch (err) {
-        console.error("Error reading active note context:", err);
+        console.error("Error reading active note / selection context:", err);
         this.activeContext = null;
       }
     } else {
@@ -255,18 +296,23 @@ export class AideChatView extends ItemView {
         cls: "lm-copilot-context-pill",
       });
 
+      const isSelection = this.activeContext.type === "selection";
       const iconSpan = pill.createSpan({ cls: "lm-copilot-context-icon" });
-      setIcon(iconSpan, "file-text");
+      setIcon(iconSpan, isSelection ? "highlighter" : "file-text");
 
       const titleSpan = pill.createSpan({
         cls: "lm-copilot-context-title",
-        text: `${this.activeContext.title}.md`,
+        text: isSelection
+          ? `${this.activeContext.title}.md (Selection)`
+          : `${this.activeContext.title}.md`,
       });
-      titleSpan.title = `Context from ${this.activeContext.path}`;
+      titleSpan.title = isSelection
+        ? `Selected text (${this.activeContext.content.length} chars) from ${this.activeContext.path}`
+        : `Full note context from ${this.activeContext.path}`;
 
       const removeBtn = pill.createSpan({
         cls: "lm-copilot-context-remove",
-        attr: { "aria-label": "Remove note context" },
+        attr: { "aria-label": "Remove context" },
       });
       setIcon(removeBtn, "x");
       removeBtn.onclick = (e) => {
@@ -277,7 +323,8 @@ export class AideChatView extends ItemView {
       };
     } else {
       // Show re-attach button if note is available in workspace
-      const activeFile = this.app.workspace.getActiveFile();
+      const mdView = this.getMostRecentMarkdownView();
+      const activeFile = mdView?.file || this.app.workspace.getActiveFile();
       if (activeFile && activeFile.extension === "md") {
         const attachBtn = this.contextBarEl.createDiv({
           cls: "lm-copilot-context-attach-btn",
@@ -358,7 +405,6 @@ export class AideChatView extends ItemView {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
-      model: this.plugin.settings.selectedModel || "",
     };
     this.plugin.currentConversationId = newConv.id;
     return newConv;
@@ -382,12 +428,15 @@ export class AideChatView extends ItemView {
     }
     this.currentConversation = conv;
     this.plugin.currentConversationId = conv.id;
+    const latestAssistantModel = [...conv.messages]
+      .reverse()
+      .find((message) => message.role === "assistant" && message.model)?.model;
     if (
-      conv.model &&
-      this.plugin.cachedModels.some((m) => m.id === conv.model)
+      latestAssistantModel &&
+      this.plugin.cachedModels.some((m) => m.id === latestAssistantModel)
     ) {
-      this.modelSelectEl.value = conv.model;
-      this.plugin.settings.selectedModel = conv.model;
+      this.modelSelectEl.value = latestAssistantModel;
+      this.plugin.settings.selectedModel = latestAssistantModel;
     }
     this.renderConversation();
   }
@@ -504,9 +553,10 @@ export class AideChatView extends ItemView {
       const contextBadge = headerEl.createSpan({
         cls: "lm-copilot-message-context-badge",
       });
-      setIcon(contextBadge, "file-text");
+      const isSelection = msg.contextIncluded.title.includes("(Selection)");
+      setIcon(contextBadge, isSelection ? "highlighter" : "file-text");
       contextBadge.createSpan({ text: msg.contextIncluded.title });
-      contextBadge.title = `Attached note: ${msg.contextIncluded.path}`;
+      contextBadge.title = `Attached context: ${msg.contextIncluded.path}`;
     }
 
     // Reasoning / Thinking block for Assistant
@@ -557,7 +607,25 @@ export class AideChatView extends ItemView {
   }
 
   private scrollToBottom(): void {
+    if (!this.messagesContainerEl) return;
     this.messagesContainerEl.scrollTop = this.messagesContainerEl.scrollHeight;
+  }
+
+  private scrollExchangeIntoView(userEl?: HTMLElement | null): void {
+    if (!this.messagesContainerEl) return;
+    const container = this.messagesContainerEl;
+
+    if (userEl) {
+      const userTop = userEl.offsetTop;
+      const exchangeHeight = container.scrollHeight - userTop;
+      // If the current exchange can fit in the viewport, anchor user message at the top
+      if (exchangeHeight <= container.clientHeight + 60) {
+        container.scrollTop = Math.max(0, userTop - 12);
+        return;
+      }
+    }
+
+    container.scrollTop = container.scrollHeight;
   }
 
   // -------------------------------------------------------------
@@ -581,6 +649,7 @@ export class AideChatView extends ItemView {
     }
 
     // 1. Prepare User Message with optional context
+    const isSelectionContext = this.activeContext?.type === "selection";
     const userMsg: ChatMessage = {
       id: "msg_" + Date.now() + "_u",
       role: "user",
@@ -588,7 +657,9 @@ export class AideChatView extends ItemView {
       timestamp: Date.now(),
       contextIncluded: this.activeContext
         ? {
-            title: this.activeContext.title,
+            title: isSelectionContext
+              ? `${this.activeContext.title} (Selection)`
+              : this.activeContext.title,
             path: this.activeContext.path,
             preview: this.activeContext.content.slice(0, 300),
           }
@@ -596,8 +667,8 @@ export class AideChatView extends ItemView {
     };
 
     this.currentConversation.messages.push(userMsg);
-    this.renderMessageElement(userMsg);
-    this.scrollToBottom();
+    const userMsgEl = this.renderMessageElement(userMsg);
+    this.scrollExchangeIntoView(userMsgEl);
 
     // Auto-title conversation from first query
     if (
@@ -634,7 +705,12 @@ export class AideChatView extends ItemView {
           i === this.currentConversation.messages.length - 1 &&
           this.activeContext
         ) {
-          messageContent = `[Current Note: "${this.activeContext.title}" (${this.activeContext.path})]\n\`\`\`markdown\n${this.activeContext.content}\n\`\`\`\n\nUser Question:\n${m.content}`;
+          const contextHeader =
+            this.activeContext.type === "selection"
+              ? `[Selected text from Note: "${this.activeContext.title}" (${this.activeContext.path})]`
+              : `[Current Note: "${this.activeContext.title}" (${this.activeContext.path})]`;
+
+          messageContent = `${contextHeader}\n\`\`\`markdown\n${this.activeContext.content}\n\`\`\`\n\nUser Question:\n${m.content}`;
         }
         apiMessages.push({
           role: "user",
@@ -657,6 +733,7 @@ export class AideChatView extends ItemView {
       id: "msg_" + Date.now() + "_a",
       role: "assistant",
       content: "",
+      model,
       reasoningContent: "",
       timestamp: Date.now(),
     };
@@ -667,7 +744,7 @@ export class AideChatView extends ItemView {
       ".lm-copilot-message-body",
     ) as HTMLElement;
 
-    this.scrollToBottom();
+    this.scrollExchangeIntoView(userMsgEl);
 
     // 4. Start Streaming Request
     let accumulatedContent = "";
@@ -696,7 +773,13 @@ export class AideChatView extends ItemView {
               this.statusEl.setText("Thinking...");
               elements.summaryTitle.setText("Thinking...");
             }
-            this.scrollToBottom();
+            // Auto scroll to bottom only if reasoning exceeds view
+            if (
+              this.messagesContainerEl.scrollHeight >
+              this.messagesContainerEl.clientHeight + 40
+            ) {
+              this.scrollToBottom();
+            }
           }
 
           if (contentChunk) {
@@ -726,7 +809,12 @@ export class AideChatView extends ItemView {
                 this,
               );
               lastRenderTime = now;
-              this.scrollToBottom();
+              if (
+                this.messagesContainerEl.scrollHeight >
+                this.messagesContainerEl.clientHeight + 40
+              ) {
+                this.scrollToBottom();
+              }
             }
           }
         },
@@ -768,6 +856,9 @@ export class AideChatView extends ItemView {
 
         // Collapse accordion when final answer is available, or leave open if only reasoning
         elements.details.open = !assistantMsg.content;
+        elements.details.ontoggle = () => {
+          this.scrollExchangeIntoView(userMsgEl);
+        };
 
         if (!this.plugin.settings.showReasoning) {
           elements.container.addClass("is-hidden");
@@ -781,9 +872,13 @@ export class AideChatView extends ItemView {
       // Render final body markdown
       bodyEl.empty();
       if (!assistantMsg.content && assistantMsg.reasoningContent) {
+        const completionNote =
+          result.finishReason === "length"
+            ? "Model reached the output-token limit while reasoning, before it produced a final response. Increase Max Output Tokens and try again."
+            : "Model completed with reasoning output but did not produce a separate final response.";
         bodyEl.createEl("p", {
           cls: "lm-copilot-reasoning-only-note",
-          text: "💡 Model finished thinking but produced no separate final response. (If generation was cut short, try increasing 'Max Output Tokens' in Settings).",
+          text: completionNote,
         });
       } else {
         await MarkdownRenderer.render(
@@ -823,7 +918,7 @@ export class AideChatView extends ItemView {
 
       this.currentConversation.updatedAt = Date.now();
       await this.saveActiveConversation();
-      this.scrollToBottom();
+      this.scrollExchangeIntoView(userMsgEl);
     }
   }
 

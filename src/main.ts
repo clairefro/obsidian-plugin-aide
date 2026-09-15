@@ -15,6 +15,8 @@ interface PluginData {
   conversations?: Conversation[]; // Legacy field in data.json for migration
 }
 
+type LegacyConversation = Conversation & { model?: string };
+
 export default class AidePlugin extends Plugin {
   settings: PluginSettings = DEFAULT_SETTINGS;
   conversations: Conversation[] = [];
@@ -99,12 +101,27 @@ export default class AidePlugin extends Plugin {
     // Settings Tab
     this.addSettingTab(new AideSettingTab(this.app, this));
 
-    // Listen to active leaf change to automatically update active note context
+    // Listen to active leaf and editor changes to automatically update active note / selection context
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
         this.updateContextInViews();
       }),
     );
+
+    this.registerEvent(
+      this.app.workspace.on("editor-change", () => {
+        this.updateContextInViews();
+      }),
+    );
+
+    this.registerDomEvent(document, "selectionchange", () => {
+      // Avoid firing when selection changes inside Aide chat textarea
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.closest(".lm-copilot-container")) {
+        return;
+      }
+      this.updateContextInViews();
+    });
 
     // Initial background model fetch if URL is configured
     this.fetchModelsInBackground();
@@ -138,6 +155,10 @@ export default class AidePlugin extends Plugin {
 
     if (leaf) {
       workspace.revealLeaf(leaf);
+      const view = this.getActiveChatView();
+      if (view) {
+        view.focusInput();
+      }
     }
   }
 
@@ -215,6 +236,9 @@ export default class AidePlugin extends Plugin {
         const raw = await adapter.read(historyPath);
         const parsed = JSON.parse(raw);
         this.conversations = Array.isArray(parsed) ? parsed : [];
+        if (this.migrateConversationModels()) {
+          await this.saveConversations();
+        }
         return;
       }
     } catch (err) {
@@ -231,12 +255,33 @@ export default class AidePlugin extends Plugin {
         `[Aide] Migrating ${legacyData.conversations.length} conversation(s) from data.json to history.json`,
       );
       this.conversations = legacyData.conversations;
+      this.migrateConversationModels();
       await this.saveConversations();
       // Clean up data.json so conversations aren't duplicated in data.json
       await this.saveSettings();
     } else {
       this.conversations = [];
     }
+  }
+
+  /** Moves the legacy conversation model onto each historical assistant message. */
+  private migrateConversationModels(): boolean {
+    let changed = false;
+
+    for (const conversation of this.conversations as LegacyConversation[]) {
+      if (conversation.model) {
+        for (const message of conversation.messages || []) {
+          if (message.role === "assistant" && !message.model) {
+            message.model = conversation.model;
+            changed = true;
+          }
+        }
+        delete conversation.model;
+        changed = true;
+      }
+    }
+
+    return changed;
   }
 
   async saveSettings(): Promise<void> {

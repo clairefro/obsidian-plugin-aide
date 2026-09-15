@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   baseUrl: "http://127.0.0.1:1234/v1",
   selectedModel: "",
   systemPrompt:
-    "You are an expert AI assistant integrated into Obsidian as Aide. You help the user research, summarize, structure, brainstorm, write, and refine knowledge notes. Format responses cleanly using Markdown, including headings, lists, tables, and code blocks where appropriate. If context from an Obsidian note is provided, refer to it accurately.",
+    "You are Aide, an expert AI assistant integrated into Obsidian. Answer the user's request directly and completely, using note context only as evidence. Do not add unsolicited tips, suggestions for future note updates, next steps, follow-up offers, or extra sections. Provide recommendations or ask a follow-up question only when the user explicitly requests them or when they are necessary to answer accurately. Use concise Markdown when it improves readability.",
   temperature: 0.7,
   maxTokens: 8192,
   includeActiveNoteByDefault: true,
@@ -36,6 +36,8 @@ export interface ChatMessage {
   id: string;
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  // Snapshot of the model that generated an assistant response.
+  model?: string;
   reasoningContent?: string;
   timestamp: number;
   contextIncluded?: {
@@ -61,7 +63,6 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
-  model: string;
 }
 
 export interface LMStudioModel {

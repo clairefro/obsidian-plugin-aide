@@ -112,7 +112,7 @@ export class LMStudioClient {
     // 3. Delimiter patterns like "Final Answer:", "Answer:", "### Response", "---", etc.
     const delimiterRegexes = [
       /(?:\n|^)(?:---|\*\*\*)\s*\n+([\s\S]+)$/i,
-      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
+      /(?:\n|^)(?:#{1,4}\s*)?(?:\*{1,2})?(?:Final Answer|Answer|Response|Conclusion|Solution|Summary|Sentence)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
       /(?:\n|^)(?:#{1,4}\s*)(?:Output|Result|Explanation)(?:\*{1,2})?[:\s\n]+([\s\S]+)$/i,
     ];
 
@@ -131,6 +131,17 @@ export class LMStudioClient {
   }
 
   /**
+   * Extracts an explicitly labelled conclusion when a model stops after its
+   * reasoning channel without producing a separate content channel.
+   */
+  static extractConclusionFromReasoning(reasoning: string): string {
+    const conclusionRegex =
+      /(?:^|[.!?]\s+)(?:so|thus|therefore)\s+(?:the\s+)?(?:final\s+)?(?:answer|response|reply)(?:\s+(?:is|should be))?\s*:\s*([^\n.!?]+(?:[.!?](?=\s|$))?)/gi;
+    const matches = Array.from(reasoning.matchAll(conclusionRegex));
+    return matches.at(-1)?.[1].trim() ?? "";
+  }
+
+  /**
    * Streams chat completion from LM Studio.
    * Supports both delta.reasoning_content (OpenAI / DeepSeek / LM Studio native)
    * and in-stream <think>...</think> tags for standard llama / oss reasoning models.
@@ -138,6 +149,7 @@ export class LMStudioClient {
   static async streamChat(params: StreamChatParams): Promise<{
     fullContent: string;
     fullReasoning: string;
+    finishReason?: string;
     toolCalls?: any[];
   }> {
     const cleanBase = this.sanitizeBaseUrl(params.baseUrl);
@@ -152,8 +164,12 @@ export class LMStudioClient {
 
     if (params.maxTokens && params.maxTokens > 0) {
       bodyPayload.max_tokens = params.maxTokens;
-      // Also send max_completion_tokens for OpenAI reasoning / gpt-oss models
-      bodyPayload.max_completion_tokens = params.maxTokens;
+    }
+
+    // Harmony uses <|end|> between analysis and final messages. Override LM
+    // Studio's model defaults so it stops only after a final answer or tool call.
+    if (params.model.toLowerCase().includes("gpt-oss")) {
+      bodyPayload.stop = ["<|return|>", "<|call|>"];
     }
 
     // Prepared for future tool calling
@@ -196,6 +212,7 @@ export class LMStudioClient {
 
     let fullContent = "";
     let fullReasoning = "";
+    let finishReason: string | undefined;
     let accumulatedToolCalls: any[] = [];
 
     // State machine for in-stream reasoning tags (case-insensitive)
@@ -430,6 +447,10 @@ export class LMStudioClient {
               const choice = parsed.choices?.[0];
               if (!choice) continue;
 
+              if (typeof choice.finish_reason === "string") {
+                finishReason = choice.finish_reason;
+              }
+
               const delta = choice.delta || {};
 
               // 1. Native reasoning delta (LM Studio, DeepSeek-R1, OpenAI-style, GPT-OSS)
@@ -484,6 +505,11 @@ export class LMStudioClient {
           fullContent = split.answer;
           fullReasoning = split.reasoning;
         }
+
+        if (!fullContent.trim()) {
+          fullContent =
+            LMStudioClient.extractConclusionFromReasoning(fullReasoning);
+        }
       } else if (fullContent.trim() && !fullReasoning.trim()) {
         const split = LMStudioClient.splitReasoningAndAnswer(fullContent);
         if (split.reasoning && split.answer) {
@@ -498,6 +524,7 @@ export class LMStudioClient {
     return {
       fullContent,
       fullReasoning,
+      finishReason,
       toolCalls:
         accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
     };

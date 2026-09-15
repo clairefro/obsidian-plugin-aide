@@ -122,10 +122,14 @@ export class ChatHistoryModal extends Modal {
       metaEl.createSpan({
         text: `${dateStr} · ${msgCount} message${msgCount === 1 ? "" : "s"}`,
       });
-      if (chat.model) {
+      const latestAssistantModel = [...(chat.messages || [])]
+        .reverse()
+        .find((message) => message.role === "assistant" && message.model)
+        ?.model;
+      if (latestAssistantModel) {
         metaEl.createSpan({
           cls: "lm-copilot-history-model-tag",
-          text: chat.model,
+          text: latestAssistantModel,
         });
       }
 

@@ -108,9 +108,9 @@ export class AideSettingTab extends PluginSettingTab {
 
     // Context Settings
     new Setting(containerEl)
-      .setName("Include Active Note by Default")
+      .setName("Include Active Note / Selection by Default")
       .setDesc(
-        "Automatically attach the current active note as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat.",
+        "Automatically attach currently selected text (or the active note if nothing is selected) as context for new queries. You can always dismiss it with the 'X' button on the context pill in the chat.",
       )
       .addToggle((toggle) =>
         toggle

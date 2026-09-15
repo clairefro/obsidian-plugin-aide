@@ -7,7 +7,7 @@ An AI assistant right-sidebar experience for Obsidian that connects seamlessly t
 - **Aide Right-Sidebar Experience**: A native Obsidian right-sidebar view for chatting with your local LLMs while browsing and writing notes.
 - **Local LM Studio Integration**: Connects directly to LM Studio's OpenAI-compatible server (defaults to `http://127.0.0.1:1234/v1`).
 - **Reasoning Models & Thinking Block**: Native support for reasoning models (e.g., DeepSeek R1, GPT-OSS, QwQ) with collapsible **Thinking Process** accordions that capture `<think>` tags and streaming `reasoning_content` deltas.
-- **Active Note Context**: Automatically attaches your current active note as context for the query. Features a context pill with an `[x]` button to dismiss context at any time, and an attach button to re-attach whenever desired.
+- **Active Note & Selection Context**: Automatically attaches your currently selected text (or the active note if no text is selected) as context for the query. Features a context pill with an `[x]` button to dismiss context at any time, and an attach button to re-attach whenever desired.
 - **Dynamic Model Switching**: Pulls all available/loaded models directly from your local LM Studio instance into a dropdown with one-click refresh.
 - **Conversation History & Management**: Start new chats, search past conversations, rename, and delete chat history saved locally in your Obsidian vault.
 - **Fast Streaming Markdown**: Real-time token streaming with live Markdown rendering using Obsidian's native renderer and quick copy-to-clipboard actions.
